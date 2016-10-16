@@ -1,0 +1,9 @@
+{
+	"fonts": [
+		{
+			"find": "SimSun",
+			"replace": "Microsoft YaHei UI",
+            "#size": 0
+		}
+	]
+}

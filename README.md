@@ -2,10 +2,10 @@
 Simple hook to change Telegram desktop's font in Windows.
 
 # Usage
-Download `TGFont.dll` and rename to `winmm.dll`. Then put it in Telegram's path.
+[Download](https://github.com/ysc3839/TGFont/releases) `TGFont.dll` and rename to `winmm.dll`. Then put it in Telegram's path.
 
-# Config file `TGFont.json`
-Config file uses UTF-8 encoding. Supports UTF-8 BOM.
+# Config file
+Create a file with name `TGFont.json` in Telegram's path. Config file uses UTF-8 encoding. Supports UTF-8 BOM.
 ```json
 {
     "fonts": [
