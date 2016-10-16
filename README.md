@@ -4,15 +4,27 @@ Simple hook to change Telegram desktop's font in Windows.
 # Usage
 Download `TGFont.dll` and rename to `winmm.dll`. Then put it in Telegram's path.
 
-# Config file
+# Config file `TGFont.json`
+Config file uses UTF-8 encoding. Supports UTF-8 BOM.
+```json
+{
+    "fonts": [
+        {
+            "find": "SimSun",
+            "replace": "Microsoft YaHei UI",
+            "#size": 0
+        },
+        {
+            ...
+        }
+    ]
+}
 ```
-[TGFont]
-Find=SimSun
-Replace=Microsoft YaHei UI
-Size=0
-```
-`Find`: Font name to find.
+`find`: Font name to find.
 
-`Replace`: Font name to replace.
+`replace`: Font name to replace.
 
-`Size`: Override all fonts size if this is **NOT ZERO**. Use at your own risk.
+`size`: Override `find` font size, rename/delete this if you don't want to change the font size.
+
+# Thanks
+[RapidJSON](http://rapidjson.org/)
