@@ -3,7 +3,7 @@
 		{
 			"find": "SimSun",
 			"replace": "Microsoft YaHei UI",
-            "#size": 0
+			"#size": 0
 		}
 	]
 }

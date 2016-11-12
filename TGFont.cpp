@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <map>
 #include <string>
+#include <io.h>
 
 #include "winmm.h"
 #include "rapidjson/document.h"
@@ -134,6 +135,16 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 
 		if (!LoadDLL())
 			return FALSE;
+
+		if (_waccess_s(L"TGFont.json", 0) != 0)
+		{
+			FILE *file;
+			if (_wfopen_s(&file, L"TGFont.json", L"wb") == 0)
+			{
+				fputs("{\r\n\t\"fonts\": [\r\n\t\t{\r\n\t\t\t\"find\": \"SimSun\",\r\n\t\t\t\"replace\": \"Microsoft YaHei UI\",\r\n\t\t\t\"#size\": 0\r\n\t\t}\r\n\t]\r\n}\r\n", file);
+				fclose(file);
+			}
+		}
 
 		if (!LoadSettings())
 			return FALSE;
