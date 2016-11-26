@@ -34,7 +34,8 @@ struct font
 };
 
 std::map<std::wstring, font> fontsMap;
-
+bool debug = false;
+FILE *logFile = nullptr;
 
 __declspec(naked) HFONT WINAPI CallOrigFn(const LOGFONTW *lplf)
 {
@@ -45,20 +46,6 @@ __declspec(naked) HFONT WINAPI CallOrigFn(const LOGFONTW *lplf)
 		mov ebp, esp
 		jmp origAddr
 	}
-}
-
-HFONT WINAPI MyCreateFontIndirectW(LOGFONTW *lplf)
-{
-	auto it = fontsMap.find(lplf->lfFaceName);
-	if (it != fontsMap.end())
-	{
-		size_t len = it->second.replace.copy(lplf->lfFaceName, LF_FACESIZE);
-		lplf->lfFaceName[len] = L'\0';
-
-		if (it->second.overrideSize)
-			lplf->lfHeight = it->second.size;
-	}
-	return CallOrigFn(lplf);
 }
 
 bool Utf8ToUtf16(const char *source, GenericStringBuffer<UTF16<>> &target)
@@ -74,7 +61,41 @@ bool Utf8ToUtf16(const char *source, GenericStringBuffer<UTF16<>> &target)
 	return success;
 }
 
-bool LoadSettings()
+bool Utf16ToUtf8(const wchar_t *source, GenericStringBuffer<UTF8<>> &target)
+{
+	bool success = true;
+	GenericStringStream<UTF16<>> sourceStream(source);
+	while (sourceStream.Peek() != '\0')
+		if (!rapidjson::Transcoder<UTF16<>, UTF8<>>::Transcode(sourceStream, target))
+		{
+			success = true;
+			break;
+		}
+	return success;
+}
+
+HFONT WINAPI MyCreateFontIndirectW(LOGFONTW *lplf)
+{
+	GenericStringBuffer<UTF8<>> name;
+	if (Utf16ToUtf8(lplf->lfFaceName, name))
+	{
+		fprintf_s(logFile, "[CreateFont] name = \"%s\", size = %d\r\n", name.GetString(), lplf->lfHeight);
+		fflush(logFile);
+	}
+
+	auto it = fontsMap.find(lplf->lfFaceName);
+	if (it != fontsMap.end())
+	{
+		size_t len = it->second.replace.copy(lplf->lfFaceName, LF_FACESIZE);
+		lplf->lfFaceName[len] = L'\0';
+
+		if (it->second.overrideSize)
+			lplf->lfHeight = it->second.size;
+	}
+	return CallOrigFn(lplf);
+}
+
+bool LoadSettings(HMODULE hModule)
 {
 	bool ret = false;
 	FILE *file;
@@ -116,6 +137,11 @@ bool LoadSettings()
 					}
 				}
 			}
+
+			member = dom.FindMember(L"debug");
+			if (member != dom.MemberEnd() && member->value.IsBool())
+				debug = member->value.GetBool();
+
 			ret = true;
 		} while (0);
 		fclose(file);
@@ -136,6 +162,14 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 		if (!LoadDLL())
 			return FALSE;
 
+		wchar_t path[MAX_PATH];
+		if (GetModuleFileName(hModule, path, MAX_PATH))
+		{
+			auto c = wcsrchr(path, L'\\');
+			if (c) c[1] = L'\0';
+			_wchdir(path);
+		}
+
 		if (_waccess_s(L"TGFont.json", 0) != 0)
 		{
 			FILE *file;
@@ -146,8 +180,16 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 			}
 		}
 
-		if (!LoadSettings())
-			return FALSE;
+		if (!LoadSettings(hModule))
+		{
+			MessageBox(0, L"Error loading TGFont.json!", L"Error", MB_ICONERROR);
+			return TRUE;
+		}
+
+		if (debug)
+		{
+			logFile = _wfsopen(L"TGFont.log", L"ab+", _SH_DENYWR);
+		}
 
 		size_t pfnCreateFontIndirectW = (size_t)GetProcAddress(GetModuleHandle(L"gdi32.dll"), "CreateFontIndirectW");
 		if (pfnCreateFontIndirectW)
@@ -162,6 +204,11 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 				VirtualProtect((LPVOID)pfnCreateFontIndirectW, 5, oldProtect, &oldProtect);
 			}
 		}
+	}
+	else if (ul_reason_for_call == DLL_PROCESS_DETACH)
+	{
+		if (logFile)
+			fclose(logFile);
 	}
 	return TRUE;
 }
