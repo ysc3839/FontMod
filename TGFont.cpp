@@ -76,11 +76,14 @@ bool Utf16ToUtf8(const wchar_t *source, GenericStringBuffer<UTF8<>> &target)
 
 HFONT WINAPI MyCreateFontIndirectW(LOGFONTW *lplf)
 {
-	GenericStringBuffer<UTF8<>> name;
-	if (Utf16ToUtf8(lplf->lfFaceName, name))
+	if (debug && logFile)
 	{
-		fprintf_s(logFile, "[CreateFont] name = \"%s\", size = %d\r\n", name.GetString(), lplf->lfHeight);
-		fflush(logFile);
+		GenericStringBuffer<UTF8<>> name;
+		if (Utf16ToUtf8(lplf->lfFaceName, name))
+		{
+			fprintf_s(logFile, "[CreateFont] name = \"%s\", size = %d\r\n", name.GetString(), lplf->lfHeight);
+			fflush(logFile);
+		}
 	}
 
 	auto it = fontsMap.find(lplf->lfFaceName);
@@ -95,11 +98,11 @@ HFONT WINAPI MyCreateFontIndirectW(LOGFONTW *lplf)
 	return CallOrigFn(lplf);
 }
 
-bool LoadSettings(HMODULE hModule)
+bool LoadSettings(HMODULE hModule, const wchar_t *fileName)
 {
 	bool ret = false;
 	FILE *file;
-	if (_wfopen_s(&file, L"TGFont.json", L"rb") == 0)
+	if (_wfopen_s(&file, fileName, L"rb") == 0)
 	{
 		do {
 			char readBuffer[512];
@@ -167,20 +170,23 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 		{
 			auto c = wcsrchr(path, L'\\');
 			if (c) c[1] = L'\0';
-			_wchdir(path);
 		}
 
-		if (_waccess_s(L"TGFont.json", 0) != 0)
+		wchar_t jsonName[MAX_PATH];
+		wcscpy_s(jsonName, path);
+		wcscat_s(jsonName, L"TGFont.json");
+
+		if (_waccess_s(jsonName, 0) != 0)
 		{
 			FILE *file;
-			if (_wfopen_s(&file, L"TGFont.json", L"wb") == 0)
+			if (_wfopen_s(&file, jsonName, L"wb") == 0)
 			{
 				fputs("{\r\n\t\"fonts\": [\r\n\t\t{\r\n\t\t\t\"find\": \"SimSun\",\r\n\t\t\t\"replace\": \"Microsoft YaHei UI\",\r\n\t\t\t\"#size\": 0\r\n\t\t}\r\n\t]\r\n}\r\n", file);
 				fclose(file);
 			}
 		}
 
-		if (!LoadSettings(hModule))
+		if (!LoadSettings(hModule, jsonName))
 		{
 			MessageBox(0, L"Error loading TGFont.json!", L"Error", MB_ICONERROR);
 			return TRUE;
@@ -188,7 +194,10 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 
 		if (debug)
 		{
-			logFile = _wfsopen(L"TGFont.log", L"ab+", _SH_DENYWR);
+			wchar_t logName[MAX_PATH];
+			wcscpy_s(logName, path);
+			wcscat_s(logName, L"TGFont.log");
+			logFile = _wfsopen(logName, L"ab+", _SH_DENYWR);
 		}
 
 		size_t pfnCreateFontIndirectW = (size_t)GetProcAddress(GetModuleHandle(L"gdi32.dll"), "CreateFontIndirectW");
