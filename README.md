@@ -17,7 +17,8 @@ Create a file with name `TGFont.json` in Telegram's path. Config file uses UTF-8
         {
             ...
         }
-    ]
+    ],
+	"debug": false
 }
 ```
 `find`: Font name to find.
@@ -25,6 +26,8 @@ Create a file with name `TGFont.json` in Telegram's path. Config file uses UTF-8
 `replace`: Font name to replace.
 
 `size`: Override `find` font size, rename/delete this if you don't want to change the font size.
+
+`debug`: Debug mode (will log CreateFont calls into TGFont.log).
 
 # Thanks
 [RapidJSON](http://rapidjson.org/)
