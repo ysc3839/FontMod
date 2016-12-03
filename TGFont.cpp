@@ -26,11 +26,25 @@ struct jmp
 typedef HFONT(WINAPI* fnCreateFontIndirectW)(const LOGFONTW *lplf);
 fnCreateFontIndirectW origAddr = nullptr;
 
+// overrideflags
+#define	_NONE 0
+#define	_SIZE 1 << 1
+#define	_WIDTH 1 << 2
+#define	_WEIGHT 1 << 3
+#define	_ITALIC 1 << 4
+#define	_UNDERLINE 1 << 5
+#define	_STRIKEOUT 1 << 6
+
 struct font
 {
 	std::wstring replace;
-	bool overrideSize;
-	size_t size;
+	uint32_t overrideFlags;
+	long size;
+	long width;
+	long weight;
+	bool italic;
+	bool underLine;
+	bool strikeOut;
 };
 
 std::map<std::wstring, font> fontsMap;
@@ -92,8 +106,18 @@ HFONT WINAPI MyCreateFontIndirectW(LOGFONTW *lplf)
 		size_t len = it->second.replace.copy(lplf->lfFaceName, LF_FACESIZE);
 		lplf->lfFaceName[len] = L'\0';
 
-		if (it->second.overrideSize)
+		if (it->second.overrideFlags & _SIZE)
 			lplf->lfHeight = it->second.size;
+		if (it->second.overrideFlags & _WIDTH)
+			lplf->lfWidth = it->second.width;
+		if (it->second.overrideFlags & _WEIGHT)
+			lplf->lfWeight = it->second.weight;
+		if (it->second.overrideFlags & _ITALIC)
+			lplf->lfItalic = it->second.italic;
+		if (it->second.overrideFlags & _UNDERLINE)
+			lplf->lfUnderline = it->second.underLine;
+		if (it->second.overrideFlags & _STRIKEOUT)
+			lplf->lfStrikeOut = it->second.strikeOut;
 	}
 	return CallOrigFn(lplf);
 }
@@ -126,13 +150,52 @@ bool LoadSettings(HMODULE hModule, const wchar_t *fileName)
 						auto replace = it->value.FindMember(L"replace");
 						if (replace != it->value.MemberEnd() && replace->value.IsString())
 						{
-							auto size = it->value.FindMember(L"size");
-							bool overrideSize = size != it->value.MemberEnd() && size->value.IsInt();
-							size_t _size = overrideSize ? size->value.GetInt() : 0;
+							font fontInfo;
+							fontInfo.replace = std::wstring(replace->value.GetString(), replace->value.GetStringLength());
+							fontInfo.overrideFlags = _NONE;
 
-							std::wstring _replace = std::wstring(replace->value.GetString(), replace->value.GetStringLength());
+							auto member = it->value.FindMember(L"size");
+							if (member != it->value.MemberEnd() && member->value.IsInt())
+							{
+								fontInfo.overrideFlags |= _SIZE;
+								fontInfo.size = member->value.GetInt();
+							}
 
-							font fontInfo = { _replace, overrideSize, _size };
+							member = it->value.FindMember(L"width");
+							if (member != it->value.MemberEnd() && member->value.IsInt())
+							{
+								fontInfo.overrideFlags |= _WIDTH;
+								fontInfo.width = member->value.GetInt();
+							}
+
+							member = it->value.FindMember(L"weight");
+							if (member != it->value.MemberEnd() && member->value.IsInt())
+							{
+								fontInfo.overrideFlags |= _WEIGHT;
+								fontInfo.weight = member->value.GetInt();
+							}
+
+							member = it->value.FindMember(L"italic");
+							if (member != it->value.MemberEnd() && member->value.IsBool())
+							{
+								fontInfo.overrideFlags |= _ITALIC;
+								fontInfo.italic = member->value.GetBool();
+							}
+
+							member = it->value.FindMember(L"underLine");
+							if (member != it->value.MemberEnd() && member->value.IsBool())
+							{
+								fontInfo.overrideFlags |= _UNDERLINE;
+								fontInfo.underLine = member->value.GetBool();
+							}
+
+							member = it->value.FindMember(L"strikeOut");
+							if (member != it->value.MemberEnd() && member->value.IsBool())
+							{
+								fontInfo.overrideFlags |= _STRIKEOUT;
+								fontInfo.strikeOut = member->value.GetBool();
+							}
+
 							fontsMap[find] = fontInfo;
 						}
 					}
@@ -179,7 +242,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 			FILE *file;
 			if (_wfopen_s(&file, jsonName, L"wb") == 0)
 			{
-				fputs("", file); // FIXME
+				fputs("{\r\n\t\"fonts\": {\r\n\t\t\"SimSun\": {\r\n\t\t\t\"replace\": \"Microsoft YaHei UI\",\r\n\t\t\t\"#size\": 0,\r\n\t\t\t\"#width\": 0,\r\n\t\t\t\"#weight\": 0,\r\n\t\t\t\"#italic\": false,\r\n\t\t\t\"#underLine\": false,\r\n\t\t\t\"#strikeOut\": false\r\n\t\t}\r\n\t},\r\n\t\"debug\": false\r\n}\r\n", file);
 				fclose(file);
 			}
 		}

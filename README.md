@@ -11,7 +11,12 @@ Create a file with name `TGFont.json` in Telegram's path. Config file uses UTF-8
     "fonts": {
         "SimSun": {
             "replace": "Microsoft YaHei UI",
-            "#size": 0
+            "#size": 0,
+            "#width": 0,
+            "#weight": 0,
+            "#italic": false,
+            "#underLine": false,
+            "#strikeOut": false
         }
     },
     "debug": false
