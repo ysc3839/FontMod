@@ -115,27 +115,25 @@ bool LoadSettings(HMODULE hModule, const wchar_t *fileName)
 				break;
 
 			auto member = dom.FindMember(L"fonts");
-			if (member != dom.MemberEnd() && member->value.IsArray())
+			if (member != dom.MemberEnd() && member->value.IsObject())
 			{
-				for (auto it = member->value.Begin(); it != member->value.End(); ++it)
+				for (auto it = member->value.MemberBegin(); it != member->value.MemberEnd(); ++it)
 				{
-					if (it->IsObject())
+					if (it->value.IsObject())
 					{
-						auto find = it->FindMember(L"find");
-						auto replace = it->FindMember(L"replace");
-						auto size = it->FindMember(L"size");
-						if (find != it->MemberEnd() && replace != it->MemberEnd() && find->value.IsString() && replace->value.IsString())
+						std::wstring find = std::wstring(it->name.GetString(), it->name.GetStringLength());
+
+						auto replace = it->value.FindMember(L"replace");
+						if (replace != it->value.MemberEnd() && replace->value.IsString())
 						{
-							bool overrideSize = size != it->MemberEnd() && size->value.IsInt();
+							auto size = it->value.FindMember(L"size");
+							bool overrideSize = size != it->value.MemberEnd() && size->value.IsInt();
 							size_t _size = overrideSize ? size->value.GetInt() : 0;
-							std::wstring _find, _replace;
 
-							_find = std::wstring(find->value.GetString(), find->value.GetStringLength());
-
-							_replace = std::wstring(replace->value.GetString(), replace->value.GetStringLength());
+							std::wstring _replace = std::wstring(replace->value.GetString(), replace->value.GetStringLength());
 
 							font fontInfo = { _replace, overrideSize, _size };
-							fontsMap[_find] = fontInfo;
+							fontsMap[find] = fontInfo;
 						}
 					}
 				}
@@ -181,7 +179,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 			FILE *file;
 			if (_wfopen_s(&file, jsonName, L"wb") == 0)
 			{
-				fputs("{\r\n\t\"fonts\": [\r\n\t\t{\r\n\t\t\t\"find\": \"SimSun\",\r\n\t\t\t\"replace\": \"Microsoft YaHei UI\",\r\n\t\t\t\"#size\": 0\r\n\t\t}\r\n\t]\r\n}\r\n", file);
+				fputs("", file); // FIXME
 				fclose(file);
 			}
 		}
