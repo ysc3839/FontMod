@@ -1,4 +1,4 @@
-#define WIN32_LEAN_AND_MEAN
+﻿#define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
 #include <cstdint>
@@ -7,11 +7,15 @@
 #include <io.h>
 
 #include "winmm.h"
+
+#define RAPIDJSON_ERROR_CHARTYPE wchar_t
+#define RAPIDJSON_ERROR_STRING(x) L##x
 #include "rapidjson/document.h"
 #include "rapidjson/stringbuffer.h"
 #include "rapidjson/encodings.h"
 #include "rapidjson/filereadstream.h"
 #include "rapidjson/encodedstream.h"
+#include "rapidjson/error/zh_CN.h"
 
 using namespace rapidjson;
 
@@ -122,7 +126,7 @@ HFONT WINAPI MyCreateFontIndirectW(LOGFONTW *lplf)
 	return CallOrigFn(lplf);
 }
 
-bool LoadSettings(HMODULE hModule, const wchar_t *fileName)
+bool LoadSettings(HMODULE hModule, const wchar_t *fileName, wchar_t *errMsg)
 {
 	bool ret = false;
 	FILE *file;
@@ -135,8 +139,17 @@ bool LoadSettings(HMODULE hModule, const wchar_t *fileName)
 
 			GenericDocument<UTF16<>> dom;
 
-			if (dom.ParseStream<0, UTF8<>>(eis).HasParseError() || !dom.IsObject())
+			if (dom.ParseStream<0, UTF8<>>(eis).HasParseError())
+			{
+				swprintf(errMsg, 512, L"解析 JSON 时出现错误! (%s, 偏移: %u)", GetParseError_Zh_Cn(dom.GetParseError()), dom.GetErrorOffset());
 				break;
+			}
+
+			if (!dom.IsObject())
+			{
+				wcscpy_s(errMsg, 512, L"JSON 格式不合法, 根值不是 Object!");
+				break;
+			}
 
 			auto member = dom.FindMember(L"fonts");
 			if (member != dom.MemberEnd() && member->value.IsObject())
@@ -210,6 +223,10 @@ bool LoadSettings(HMODULE hModule, const wchar_t *fileName)
 		} while (0);
 		fclose(file);
 	}
+	else
+	{
+		swprintf(errMsg, 512, L"无法打开 TGFont.json! (%hs)", strerror(errno));
+	}
 	return ret;
 }
 
@@ -247,9 +264,12 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 			}
 		}
 
-		if (!LoadSettings(hModule, jsonName))
+		wchar_t errMsg[512];
+		if (!LoadSettings(hModule, jsonName, errMsg))
 		{
-			MessageBox(0, L"Error loading TGFont.json!", L"Error", MB_ICONERROR);
+			wchar_t msg[512];
+			swprintf_s(msg, L"加载配置文件时出现错误!\n%s", errMsg);
+			MessageBox(0, msg, L"Error", MB_ICONERROR);
 			return TRUE;
 		}
 
