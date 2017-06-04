@@ -31,6 +31,6 @@
 `debug`: 调试模式 (会记录 CreateFont 调用到 TGFont.log).
 
 # Thanks
-感谢宣传此项目的朋友! 可以在[这里](https://github.com/ysc3839/TGFont/graphs/traffic)看到访问记录.
+感谢宣传此项目的朋友! <del>可以在[这里](https://github.com/ysc3839/TGFont/graphs/traffic)看到访问记录.</del>
 
 [RapidJSON](http://rapidjson.org/)
