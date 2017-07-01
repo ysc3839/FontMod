@@ -1,4 +1,6 @@
 # TGFont
+[繁体中文](README.zh_TW.md)
+
 修改 Telegram desktop Windows 版字体的简单的 hook 工具. (理论上也支持别的软件)
 
 # 使用方法
@@ -26,11 +28,11 @@
 
 `replace`: 要替换成的字体名称.
 
-`size` `width` `weight` `italic` `underLine` `strikeOut`: 覆盖原有字体设置. 分别为: 字体大小 宽度 字重(粗体) 斜体 下划线 删除线. 如果不想覆盖的话请把这些项删除或者改名.
+`size` `width` `weight` `italic` `underLine` `strikeOut`: 覆盖原始字体样式. 分别为: 字体大小 宽度 字重(粗体) 斜体 下划线 删除线. 如果不想覆盖的话请把这些项删除或者改名.
 
 `debug`: 调试模式 (会记录 CreateFont 调用到 TGFont.log).
 
 # Thanks
-感谢宣传此项目的朋友! <del>可以在[这里](https://github.com/ysc3839/TGFont/graphs/traffic)看到访问记录.</del>
+感谢宣传此项目的朋友!
 
 [RapidJSON](http://rapidjson.org/)
