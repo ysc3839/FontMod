@@ -26,7 +26,7 @@
 ```
 `key ("SimSun")`: 要修改的字型名稱.
 
-`replace`: 要替換成的字型名稱.
+`replace`: 要替換成的字型名稱. 繁體環境下建議改爲 `Microsoft JhengHei UI`
 
 `size` `width` `weight` `italic` `underLine` `strikeOut`: 覆蓋原始字型樣式. 分別為: 字型大小 寬度 字重(粗體) 斜體 下劃線 刪除線. 如果不想覆蓋的話請把這些項刪除或者改名.
 
