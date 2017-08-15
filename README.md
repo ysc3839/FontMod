@@ -6,6 +6,8 @@
 # 使用方法
 [下载](https://github.com/ysc3839/TGFont/releases) `TGFont.dll` 并重命名为 `winmm.dll`. 然后放在 Telegram 的文件夹里.
 
+用户字体: 把字体文件放在 `fonts` 文件夹内, 可以直接使用, 无需安装到系统中.
+
 # 配置文件
 初次运行时会创建 `TGFont.json`. 配置文件使用 UTF-8 编码. 支持 UTF-8 BOM.
 ```json
