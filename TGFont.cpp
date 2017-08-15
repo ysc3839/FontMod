@@ -230,6 +230,20 @@ bool LoadSettings(HMODULE hModule, const wchar_t *fileName, wchar_t *errMsg)
 	return ret;
 }
 
+void LoadUserFonts()
+{
+	WIN32_FIND_DATA ffd;
+	HANDLE hFind = FindFirstFile(L"fonts\\*", &ffd);
+	if (hFind != INVALID_HANDLE_VALUE)
+	{
+		do {
+			if ((ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != FILE_ATTRIBUTE_DIRECTORY)
+				AddFontResourceEx(ffd.cFileName, FR_PRIVATE, 0);
+		} while (FindNextFile(hFind, &ffd) != 0);
+		FindClose(hFind);
+	}
+}
+
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved)
 {
 	if (ul_reason_for_call == DLL_PROCESS_ATTACH)
@@ -280,6 +294,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 			wcscat_s(logName, L"TGFont.log");
 			logFile = _wfsopen(logName, L"ab+", _SH_DENYWR);
 		}
+
+		LoadUserFonts();
 
 		size_t pfnCreateFontIndirectW = (size_t)GetProcAddress(GetModuleHandle(L"gdi32.dll"), "CreateFontIndirectW");
 		if (pfnCreateFontIndirectW)
