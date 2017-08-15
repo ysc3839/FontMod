@@ -110,17 +110,17 @@ HFONT WINAPI MyCreateFontIndirectW(LOGFONTW *lplf)
 		size_t len = it->second.replace.copy(lplf->lfFaceName, LF_FACESIZE);
 		lplf->lfFaceName[len] = L'\0';
 
-		if (it->second.overrideFlags & _SIZE)
+		if ((it->second.overrideFlags & _SIZE) == _SIZE)
 			lplf->lfHeight = it->second.size;
-		if (it->second.overrideFlags & _WIDTH)
+		if ((it->second.overrideFlags & _WIDTH) == _WIDTH)
 			lplf->lfWidth = it->second.width;
-		if (it->second.overrideFlags & _WEIGHT)
+		if ((it->second.overrideFlags & _WEIGHT) == _WEIGHT)
 			lplf->lfWeight = it->second.weight;
-		if (it->second.overrideFlags & _ITALIC)
+		if ((it->second.overrideFlags & _ITALIC) == _ITALIC)
 			lplf->lfItalic = it->second.italic;
-		if (it->second.overrideFlags & _UNDERLINE)
+		if ((it->second.overrideFlags & _UNDERLINE) == _UNDERLINE)
 			lplf->lfUnderline = it->second.underLine;
-		if (it->second.overrideFlags & _STRIKEOUT)
+		if ((it->second.overrideFlags & _STRIKEOUT) == _STRIKEOUT)
 			lplf->lfStrikeOut = it->second.strikeOut;
 	}
 	return CallOrigFn(lplf);
