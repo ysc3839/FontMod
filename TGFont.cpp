@@ -3,6 +3,7 @@
 #include <windows.h>
 #include <cstdint>
 #include <map>
+#include <vector>
 #include <string>
 #include <io.h>
 
@@ -18,6 +19,8 @@
 #include "rapidjson/error/zh_CN.h"
 
 using namespace rapidjson;
+using std::wstring;
+using std::string;
 
 #pragma pack(push, 1)
 struct jmp
@@ -130,6 +133,16 @@ bool LoadSettings(HMODULE hModule, const wchar_t *fileName, wchar_t *errMsg)
 {
 	bool ret = false;
 	FILE *file;
+
+	vector<string> replace_param_table = {
+		"size",
+		"width",
+		"weight",
+		"italic",
+		"underLine",
+		"strikeOut"
+	};
+
 	if (_wfopen_s(&file, fileName, L"rb") == 0)
 	{
 		do {
@@ -167,48 +180,48 @@ bool LoadSettings(HMODULE hModule, const wchar_t *fileName, wchar_t *errMsg)
 							fontInfo.replace = std::wstring(replace->value.GetString(), replace->value.GetStringLength());
 							fontInfo.overrideFlags = _NONE;
 
-							auto member = it->value.FindMember(L"size");
-							if (member != it->value.MemberEnd() && member->value.IsInt())
-							{
-								fontInfo.overrideFlags |= _SIZE;
-								fontInfo.size = member->value.GetInt();
+							auto member;
+							for(int i = 0; i < replace_param_table.size(); ++i) {
+								member = it->value.FindMember(replace_param_table[i]);
+								if(i < 3) {
+									if(member != it->value.MemberEnd() && member->value.IsInt()) {
+										switch(i) {
+											case 0 : //size
+												fontInfo.overrideFlags |= _SIZE;
+												fontInfo.size = member->value.GetInt();
+												break;
+											case 1 : //width
+												fontInfo.overrideFlags |= _WIDTH;
+												fontInfo.width = member->value.GetInt();
+												break;
+											case 2 : //weight
+												fontInfo.overrideFlags |= _WEIGHT;
+												fontInfo.weight = member->value.GetInt();
+												break;
+											default : break;
+										}
+									}
+								}
+								else {
+									if (member != it->value.MemberEnd() && member->value.IsBool()) {
+										switch(i) {
+											case 3 : //italic
+												fontInfo.overrideFlags |= _ITALIC;
+												fontInfo.italic = member->value.GetBool();
+												break;
+											case 4 : //underLine
+												fontInfo.overrideFlags |= _UNDERLINE;
+												fontInfo.underLine = member->value.GetBool();
+												break;
+											case 5 :
+												fontInfo.overrideFlags |= _STRIKEOUT;
+												fontInfo.strikeOut = member->value.GetBool();	
+												break;
+											default : break;
+										}
+									}
+								}
 							}
-
-							member = it->value.FindMember(L"width");
-							if (member != it->value.MemberEnd() && member->value.IsInt())
-							{
-								fontInfo.overrideFlags |= _WIDTH;
-								fontInfo.width = member->value.GetInt();
-							}
-
-							member = it->value.FindMember(L"weight");
-							if (member != it->value.MemberEnd() && member->value.IsInt())
-							{
-								fontInfo.overrideFlags |= _WEIGHT;
-								fontInfo.weight = member->value.GetInt();
-							}
-
-							member = it->value.FindMember(L"italic");
-							if (member != it->value.MemberEnd() && member->value.IsBool())
-							{
-								fontInfo.overrideFlags |= _ITALIC;
-								fontInfo.italic = member->value.GetBool();
-							}
-
-							member = it->value.FindMember(L"underLine");
-							if (member != it->value.MemberEnd() && member->value.IsBool())
-							{
-								fontInfo.overrideFlags |= _UNDERLINE;
-								fontInfo.underLine = member->value.GetBool();
-							}
-
-							member = it->value.FindMember(L"strikeOut");
-							if (member != it->value.MemberEnd() && member->value.IsBool())
-							{
-								fontInfo.overrideFlags |= _STRIKEOUT;
-								fontInfo.strikeOut = member->value.GetBool();
-							}
-
 							fontsMap[find] = fontInfo;
 						}
 					}
@@ -218,7 +231,6 @@ bool LoadSettings(HMODULE hModule, const wchar_t *fileName, wchar_t *errMsg)
 			member = dom.FindMember(L"debug");
 			if (member != dom.MemberEnd() && member->value.IsBool())
 				debug = member->value.GetBool();
-
 			ret = true;
 		} while (0);
 		fclose(file);
@@ -230,7 +242,7 @@ bool LoadSettings(HMODULE hModule, const wchar_t *fileName, wchar_t *errMsg)
 	return ret;
 }
 
-void LoadUserFonts()
+inline void LoadUserFonts()
 {
 	WIN32_FIND_DATA ffd;
 	HANDLE hFind = FindFirstFile(L"fonts\\*", &ffd);
