@@ -32,23 +32,33 @@ fnCreateFontIndirectW origAddr = nullptr;
 
 // overrideflags
 #define	_NONE 0
-#define	_SIZE 1 << 1
+#define	_HEIGHT 1 << 1
 #define	_WIDTH 1 << 2
 #define	_WEIGHT 1 << 3
 #define	_ITALIC 1 << 4
 #define	_UNDERLINE 1 << 5
 #define	_STRIKEOUT 1 << 6
+#define	_CHARSET 1 << 7
+#define	_OUTPRECISION 1 << 8
+#define	_CLIPPRECISION 1 << 9
+#define	_QUALITY 1 << 10
+#define	_PITCHANDFAMILY 1 << 11
 
 struct font
 {
 	std::wstring replace;
 	uint32_t overrideFlags;
-	long size;
+	long height;
 	long width;
 	long weight;
 	bool italic;
 	bool underLine;
 	bool strikeOut;
+	BYTE charSet;
+	BYTE outPrecision;
+	BYTE clipPrecision;
+	BYTE quality;
+	BYTE pitchAndFamily;
 };
 
 std::map<std::wstring, font> fontsMap;
@@ -99,7 +109,22 @@ HFONT WINAPI MyCreateFontIndirectW(LOGFONTW *lplf)
 		GenericStringBuffer<UTF8<>> name;
 		if (Utf16ToUtf8(lplf->lfFaceName, name))
 		{
-			fprintf_s(logFile, "[CreateFont] name = \"%s\", size = %d\r\n", name.GetString(), lplf->lfHeight);
+#define bool_string(b) b != FALSE ? "true" : "false"
+			fprintf_s(logFile,
+				"[CreateFont] name = \"%s\", height = %d, "
+				"width = %d, escapement = %d, "
+				"orientation = %d, weight = %d, "
+				"italic = %s, underline = %s, "
+				"strikeout = %s, charset = %d, "
+				"outprecision = %d, clipprecision = %d, "
+				"quality = %d, pitchandfamily = %d\r\n",
+				name.GetString(), lplf->lfHeight,
+				lplf->lfWidth, lplf->lfEscapement,
+				lplf->lfOrientation, lplf->lfWeight,
+				bool_string(lplf->lfItalic), bool_string(lplf->lfUnderline),
+				bool_string(lplf->lfStrikeOut), lplf->lfCharSet,
+				lplf->lfOutPrecision, lplf->lfClipPrecision,
+				lplf->lfQuality, lplf->lfPitchAndFamily);
 			fflush(logFile);
 		}
 	}
@@ -107,11 +132,11 @@ HFONT WINAPI MyCreateFontIndirectW(LOGFONTW *lplf)
 	auto it = fontsMap.find(lplf->lfFaceName);
 	if (it != fontsMap.end())
 	{
-		size_t len = it->second.replace.copy(lplf->lfFaceName, LF_FACESIZE);
+		size_t len = it->second.replace._Copy_s(lplf->lfFaceName, LF_FACESIZE, LF_FACESIZE);
 		lplf->lfFaceName[len] = L'\0';
 
-		if ((it->second.overrideFlags & _SIZE) == _SIZE)
-			lplf->lfHeight = it->second.size;
+		if ((it->second.overrideFlags & _HEIGHT) == _HEIGHT)
+			lplf->lfHeight = it->second.height;
 		if ((it->second.overrideFlags & _WIDTH) == _WIDTH)
 			lplf->lfWidth = it->second.width;
 		if ((it->second.overrideFlags & _WEIGHT) == _WEIGHT)
@@ -122,6 +147,16 @@ HFONT WINAPI MyCreateFontIndirectW(LOGFONTW *lplf)
 			lplf->lfUnderline = it->second.underLine;
 		if ((it->second.overrideFlags & _STRIKEOUT) == _STRIKEOUT)
 			lplf->lfStrikeOut = it->second.strikeOut;
+		if ((it->second.overrideFlags & _CHARSET) == _CHARSET)
+			lplf->lfCharSet = it->second.charSet;
+		if ((it->second.overrideFlags & _OUTPRECISION) == _OUTPRECISION)
+			lplf->lfOutPrecision = it->second.outPrecision;
+		if ((it->second.overrideFlags & _CLIPPRECISION) == _CLIPPRECISION)
+			lplf->lfClipPrecision = it->second.clipPrecision;
+		if ((it->second.overrideFlags & _QUALITY) == _QUALITY)
+			lplf->lfQuality = it->second.quality;
+		if ((it->second.overrideFlags & _PITCHANDFAMILY) == _PITCHANDFAMILY)
+			lplf->lfPitchAndFamily = it->second.pitchAndFamily;
 	}
 	return CallOrigFn(lplf);
 }
@@ -170,8 +205,8 @@ bool LoadSettings(HMODULE hModule, const wchar_t *fileName, wchar_t *errMsg)
 							auto member = it->value.FindMember(L"size");
 							if (member != it->value.MemberEnd() && member->value.IsInt())
 							{
-								fontInfo.overrideFlags |= _SIZE;
-								fontInfo.size = member->value.GetInt();
+								fontInfo.overrideFlags |= _HEIGHT;
+								fontInfo.height = member->value.GetInt();
 							}
 
 							member = it->value.FindMember(L"width");
@@ -209,6 +244,41 @@ bool LoadSettings(HMODULE hModule, const wchar_t *fileName, wchar_t *errMsg)
 								fontInfo.strikeOut = member->value.GetBool();
 							}
 
+							member = it->value.FindMember(L"charSet");
+							if (member != it->value.MemberEnd() && member->value.IsInt())
+							{
+								fontInfo.overrideFlags |= _CHARSET;
+								fontInfo.charSet = member->value.GetInt();
+							}
+
+							member = it->value.FindMember(L"outPrecision");
+							if (member != it->value.MemberEnd() && member->value.IsInt())
+							{
+								fontInfo.overrideFlags |= _OUTPRECISION;
+								fontInfo.outPrecision = member->value.GetInt();
+							}
+
+							member = it->value.FindMember(L"clipPrecision");
+							if (member != it->value.MemberEnd() && member->value.IsInt())
+							{
+								fontInfo.overrideFlags |= _CLIPPRECISION;
+								fontInfo.clipPrecision = member->value.GetInt();
+							}
+
+							member = it->value.FindMember(L"quality");
+							if (member != it->value.MemberEnd() && member->value.IsInt())
+							{
+								fontInfo.overrideFlags |= _QUALITY;
+								fontInfo.quality = member->value.GetInt();
+							}
+
+							member = it->value.FindMember(L"pitchAndFamily");
+							if (member != it->value.MemberEnd() && member->value.IsInt())
+							{
+								fontInfo.overrideFlags |= _PITCHANDFAMILY;
+								fontInfo.pitchAndFamily = member->value.GetInt();
+							}
+
 							fontsMap[find] = fontInfo;
 						}
 					}
@@ -225,22 +295,52 @@ bool LoadSettings(HMODULE hModule, const wchar_t *fileName, wchar_t *errMsg)
 	}
 	else
 	{
+#pragma warning(push)
+#pragma warning(disable: 4996) // 'strerror': This function or variable may be unsafe.
 		swprintf(errMsg, 512, L"无法打开 TGFont.json! (%hs)", strerror(errno));
+#pragma warning(pop)
 	}
 	return ret;
 }
 
-void LoadUserFonts()
+void LoadUserFonts(const wchar_t *path)
 {
+	wchar_t fontPath[MAX_PATH];
+	wcscpy_s(fontPath, path);
+	wcscat_s(fontPath, L"fonts\\");
+	wchar_t *font = fontPath + wcslen(fontPath);
+	font[0] = L'*';
+	font[1] = 0;
+
 	WIN32_FIND_DATA ffd;
-	HANDLE hFind = FindFirstFile(L"fonts\\*", &ffd);
+	HANDLE hFind = FindFirstFile(fontPath, &ffd);
 	if (hFind != INVALID_HANDLE_VALUE)
 	{
 		do {
 			if ((ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != FILE_ATTRIBUTE_DIRECTORY)
-				AddFontResourceEx(ffd.cFileName, FR_PRIVATE, 0);
+			{
+				wcscpy_s(font, fontPath + MAX_PATH - font, ffd.cFileName);
+				int ret = AddFontResourceEx(fontPath, FR_PRIVATE, 0);
+				if (debug && logFile)
+				{
+					GenericStringBuffer<UTF8<>> filename;
+					if (Utf16ToUtf8(ffd.cFileName, filename))
+					{
+						fprintf_s(logFile, "[LoadUserFonts] filename = \"%s\", ret = %d, lasterror = %d\r\n", filename.GetString(), ret, GetLastError());
+						fflush(logFile);
+					}
+				}
+			}
 		} while (FindNextFile(hFind, &ffd) != 0);
 		FindClose(hFind);
+	}
+	else
+	{
+		if (debug && logFile)
+		{
+			fprintf_s(logFile, "[LoadUserFonts] FindFirstFile failed! (%d)\r\n", GetLastError());
+			fflush(logFile);
+		}
 	}
 }
 
@@ -273,7 +373,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 			FILE *file;
 			if (_wfopen_s(&file, jsonName, L"wb") == 0)
 			{
-				fputs("{\r\n\t\"fonts\": {\r\n\t\t\"SimSun\": {\r\n\t\t\t\"replace\": \"Microsoft YaHei UI\",\r\n\t\t\t\"#size\": 0,\r\n\t\t\t\"#width\": 0,\r\n\t\t\t\"#weight\": 0,\r\n\t\t\t\"#italic\": false,\r\n\t\t\t\"#underLine\": false,\r\n\t\t\t\"#strikeOut\": false\r\n\t\t}\r\n\t},\r\n\t\"debug\": false\r\n}\r\n", file);
+				fputs("{\r\n\t\"fonts\": {\r\n\t\t\"SimSun\": {\r\n\t\t\t\"replace\": \"Microsoft YaHei UI\",\r\n\t\t\t\"#size\": 0,\r\n\t\t\t\"#width\": 0,\r\n\t\t\t\"#weight\": 0,\r\n\t\t\t\"#italic\": false,\r\n\t\t\t\"#underLine\": false,\r\n\t\t\t\"#strikeOut\": false,\r\n\t\t\t\"#charSet\": 0,\r\n\t\t\t\"#outPrecision\": 0,\r\n\t\t\t\"#clipPrecision\": 0,\r\n\t\t\t\"#quality\": 0,\r\n\t\t\t\"#pitchAndFamily\": 0\r\n\t\t}\r\n\t},\r\n\t\"debug\": false\r\n}\r\n", file);
 				fclose(file);
 			}
 		}
@@ -295,7 +395,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 			logFile = _wfsopen(logName, L"ab+", _SH_DENYWR);
 		}
 
-		LoadUserFonts();
+		LoadUserFonts(path);
 
 		size_t pfnCreateFontIndirectW = (size_t)GetProcAddress(GetModuleHandle(L"gdi32.dll"), "CreateFontIndirectW");
 		if (pfnCreateFontIndirectW)
