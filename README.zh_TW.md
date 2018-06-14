@@ -20,7 +20,12 @@
             "#weight": 0,
             "#italic": false,
             "#underLine": false,
-            "#strikeOut": false
+            "#strikeOut": false,
+            "#charSet": 0,
+            "#outPrecision": 0,
+            "#clipPrecision": 0,
+            "#quality": 0,
+            "#pitchAndFamily": 0
         }
     },
     "debug": false
@@ -30,9 +35,9 @@
 
 `replace`: 要替換成的字型名稱. 繁體環境下建議改爲 `Microsoft JhengHei UI`
 
-`size` `width` `weight` `italic` `underLine` `strikeOut`: 覆蓋原始字型樣式. 分別為: 字型大小 寬度 字重(粗體) 斜體 下劃線 刪除線. 如果不想覆蓋的話請把這些項刪除或者改名.
+`size` `width` `weight` `italic` `underLine` `strikeOut` `charSet` `outPrecision` `clipPrecision` `quality` `pitchAndFamily`: 覆蓋原始字型樣式. 請參見 [MSDN 文檔](https://msdn.microsoft.com/en-us/library/dd145037). 如果不想覆蓋的話請把這些項刪除或者改名.
 
-`debug`: 除錯模式 (會記錄 CreateFont 調用到 TGFont.log).
+`debug`: 除錯模式 (會記錄 LoadUserFonts 及 CreateFont 調用到 TGFont.log).
 
 # Thanks
 感謝宣傳此項目的朋友!
