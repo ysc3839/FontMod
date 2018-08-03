@@ -39,6 +39,8 @@
 
 `debug`: 除錯模式 (會記錄 LoadUserFonts 及 CreateFont 調用到 TGFont.log).
 
+> 如果只想替換中文字型，保留英文字型不變，你需要將 "key" 設為中文的 fallback 字型。這個字型在不同語言環境下可能不一樣 (比如簡體中文是 SimSun)，你需要使用 debug 模式找到對應的字型。
+
 # Thanks
 感謝宣傳此項目的朋友!
 
