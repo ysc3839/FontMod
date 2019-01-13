@@ -27,8 +27,8 @@ struct jmp
 };
 #pragma pack(pop)
 
-typedef HFONT(WINAPI* fnCreateFontIndirectW)(const LOGFONTW *lplf);
-fnCreateFontIndirectW origAddr = nullptr;
+size_t addrCreateFontIndirectW = 0;
+size_t addrGetStockObject = 0;
 
 // overrideflags
 #define	_NONE 0
@@ -61,18 +61,36 @@ struct font
 	BYTE pitchAndFamily;
 };
 
+enum GSOFontMode {
+	DISABLED,
+	USE_NCM_FONT, // Use default font from SystemParametersInfo SPI_GETNONCLIENTMETRICS
+	USE_USER_FONT // Use user defined font
+};
+
 std::map<std::wstring, font> fontsMap;
 bool debug = false;
 FILE *logFile = nullptr;
+HFONT newGSOFont = nullptr;
 
-__declspec(naked) HFONT WINAPI CallOrigFn(const LOGFONTW *lplf)
+__declspec(naked) HFONT WINAPI CallOrigCreateFontIndirectW(const LOGFONTW *lplf)
 {
 	_asm
 	{
 		mov edi, edi
 		push ebp
 		mov ebp, esp
-		jmp origAddr
+		jmp addrCreateFontIndirectW
+	}
+}
+
+__declspec(naked) HGDIOBJ WINAPI CallOrigGetStockObject(int i)
+{
+	_asm
+	{
+		mov edi, edi
+		push ebp
+		mov ebp, esp
+		jmp addrGetStockObject
 	}
 }
 
@@ -158,10 +176,17 @@ HFONT WINAPI MyCreateFontIndirectW(LOGFONTW *lplf)
 		if ((it->second.overrideFlags & _PITCHANDFAMILY) == _PITCHANDFAMILY)
 			lplf->lfPitchAndFamily = it->second.pitchAndFamily;
 	}
-	return CallOrigFn(lplf);
+	return CallOrigCreateFontIndirectW(lplf);
 }
 
-bool LoadSettings(HMODULE hModule, const wchar_t *fileName, wchar_t *errMsg)
+HGDIOBJ WINAPI MyGetStockObject(int i)
+{
+	if (OEM_FIXED_FONT <= i && i <= DEFAULT_GUI_FONT && i != DEFAULT_PALETTE)
+		return newGSOFont;
+	return CallOrigGetStockObject(i);
+}
+
+bool LoadSettings(HMODULE hModule, const wchar_t *fileName, wchar_t *errMsg, GSOFontMode &fixGSOFont, LOGFONT &userGSOFont)
 {
 	bool ret = false;
 	FILE *file;
@@ -289,6 +314,91 @@ bool LoadSettings(HMODULE hModule, const wchar_t *fileName, wchar_t *errMsg)
 			if (member != dom.MemberEnd() && member->value.IsBool())
 				debug = member->value.GetBool();
 
+			member = dom.FindMember(L"fixGSOFont");
+			if (member != dom.MemberEnd())
+			{
+				if (member->value.IsBool())
+				{
+					if (member->value.GetBool())
+						fixGSOFont = USE_NCM_FONT;
+				}
+				else if (member->value.IsObject())
+				{
+					auto name = member->value.FindMember(L"name");
+					if (name != member->value.MemberEnd() && name->value.IsString())
+					{
+						fixGSOFont = USE_USER_FONT;
+						memcpy_s(userGSOFont.lfFaceName, sizeof(userGSOFont.lfFaceName), name->value.GetString(), name->value.GetStringLength() * sizeof(decltype(name->value)::Ch));
+
+						auto m = member->value.FindMember(L"size");
+						if (m != member->value.MemberEnd() && m->value.IsInt())
+						{
+							userGSOFont.lfHeight = m->value.GetInt();
+						}
+
+						m = member->value.FindMember(L"width");
+						if (m != member->value.MemberEnd() && m->value.IsInt())
+						{
+							userGSOFont.lfWidth = m->value.GetInt();
+						}
+
+						m = member->value.FindMember(L"weight");
+						if (m != member->value.MemberEnd() && m->value.IsInt())
+						{
+							userGSOFont.lfWeight = m->value.GetInt();
+						}
+
+						m = member->value.FindMember(L"italic");
+						if (m != member->value.MemberEnd() && m->value.IsBool())
+						{
+							userGSOFont.lfItalic = m->value.GetBool();
+						}
+
+						m = member->value.FindMember(L"underLine");
+						if (m != member->value.MemberEnd() && m->value.IsBool())
+						{
+							userGSOFont.lfUnderline = m->value.GetBool();
+						}
+
+						m = member->value.FindMember(L"strikeOut");
+						if (m != member->value.MemberEnd() && m->value.IsBool())
+						{
+							userGSOFont.lfStrikeOut = m->value.GetBool();
+						}
+
+						m = member->value.FindMember(L"charSet");
+						if (m != member->value.MemberEnd() && m->value.IsInt())
+						{
+							userGSOFont.lfCharSet = m->value.GetInt();
+						}
+
+						m = member->value.FindMember(L"outPrecision");
+						if (m != member->value.MemberEnd() && m->value.IsInt())
+						{
+							userGSOFont.lfOutPrecision = m->value.GetInt();
+						}
+
+						m = member->value.FindMember(L"clipPrecision");
+						if (m != member->value.MemberEnd() && m->value.IsInt())
+						{
+							userGSOFont.lfClipPrecision = m->value.GetInt();
+						}
+
+						m = member->value.FindMember(L"quality");
+						if (m != member->value.MemberEnd() && m->value.IsInt())
+						{
+							userGSOFont.lfQuality = m->value.GetInt();
+						}
+
+						m = member->value.FindMember(L"pitchAndFamily");
+						if (m != member->value.MemberEnd() && m->value.IsInt())
+						{
+							userGSOFont.lfPitchAndFamily = m->value.GetInt();
+						}
+					}
+				}
+			}
+
 			ret = true;
 		} while (0);
 		fclose(file);
@@ -344,6 +454,19 @@ void LoadUserFonts(const wchar_t *path)
 	}
 }
 
+void InlineHook(void *func, void *hookFunc, size_t *origAddr)
+{
+	DWORD oldProtect;
+	if (VirtualProtect(func, 5, PAGE_EXECUTE_READWRITE, &oldProtect))
+	{
+		jmp *hook = (jmp *)func;
+		hook->opcode = 0xE9; // jmp
+		hook->address = (size_t)hookFunc - (size_t)func - 5;
+		*origAddr = (size_t)func + 5;
+		VirtualProtect(func, 5, oldProtect, &oldProtect);
+	}
+}
+
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved)
 {
 	if (ul_reason_for_call == DLL_PROCESS_ATTACH)
@@ -378,8 +501,11 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 			}
 		}
 
+		GSOFontMode fixGSOFont = DISABLED;
+		LOGFONT userGSOFont = {};
+
 		wchar_t errMsg[512];
-		if (!LoadSettings(hModule, jsonName, errMsg))
+		if (!LoadSettings(hModule, jsonName, errMsg, fixGSOFont, userGSOFont))
 		{
 			wchar_t msg[512];
 			swprintf_s(msg, L"加载配置文件时出现错误!\n%s", errMsg);
@@ -397,18 +523,49 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 
 		LoadUserFonts(path);
 
-		size_t pfnCreateFontIndirectW = (size_t)GetProcAddress(GetModuleHandle(L"gdi32.dll"), "CreateFontIndirectW");
+		switch (fixGSOFont)
+		{
+		case USE_NCM_FONT:
+		{
+			NONCLIENTMETRICS ncm = { sizeof(ncm) };
+			if (SystemParametersInfo(SPI_GETNONCLIENTMETRICS, sizeof(NONCLIENTMETRICS), &ncm, 0))
+			{
+				newGSOFont = CreateFontIndirect(&ncm.lfMessageFont);
+				if (debug && logFile)
+				{
+					fprintf_s(logFile, "[DllMain] SystemParametersInfo NONCLIENTMETRICS.lfMessageFont.lfFaceName=\"%ls\"\r\n", ncm.lfMessageFont.lfFaceName);
+					fflush(logFile);
+				}
+			}
+			else if (debug && logFile)
+			{
+				fprintf_s(logFile, "[DllMain] SystemParametersInfo failed! (%d)\r\n", GetLastError());
+				fflush(logFile);
+			}
+		}
+		break;
+		case USE_USER_FONT:
+		{
+			newGSOFont = CreateFontIndirect(&userGSOFont);
+		}
+		break;
+		}
+
+		HMODULE hGdi32 = GetModuleHandle(L"gdi32.dll");
+
+		if (fixGSOFont != DISABLED)
+		{
+			auto pfnGetStockObject = GetProcAddress(hGdi32, "GetStockObject");
+			if (pfnGetStockObject)
+			{
+				InlineHook(pfnGetStockObject, MyGetStockObject, &addrGetStockObject);
+			}
+		}
+
+		auto pfnCreateFontIndirectW = GetProcAddress(hGdi32, "CreateFontIndirectW");
 		if (pfnCreateFontIndirectW)
 		{
-			DWORD oldProtect;
-			if (VirtualProtect((LPVOID)pfnCreateFontIndirectW, 5, PAGE_EXECUTE_READWRITE, &oldProtect))
-			{
-				jmp *hook = (jmp *)pfnCreateFontIndirectW;
-				hook->opcode = 0xE9; // jmp
-				hook->address = (size_t)MyCreateFontIndirectW - (size_t)pfnCreateFontIndirectW - 5;
-				origAddr = (fnCreateFontIndirectW)(pfnCreateFontIndirectW + 5);
-				VirtualProtect((LPVOID)pfnCreateFontIndirectW, 5, oldProtect, &oldProtect);
-			}
+			InlineHook(pfnCreateFontIndirectW, MyCreateFontIndirectW, &addrCreateFontIndirectW);
 		}
 	}
 	else if (ul_reason_for_call == DLL_PROCESS_DETACH)
