@@ -422,15 +422,15 @@ void LoadUserFonts(const wchar_t *path)
 	font[0] = L'*';
 	font[1] = 0;
 
-	WIN32_FIND_DATA ffd;
-	HANDLE hFind = FindFirstFile(fontPath, &ffd);
+	WIN32_FIND_DATAW ffd;
+	HANDLE hFind = FindFirstFileW(fontPath, &ffd);
 	if (hFind != INVALID_HANDLE_VALUE)
 	{
 		do {
 			if ((ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != FILE_ATTRIBUTE_DIRECTORY)
 			{
 				wcscpy_s(font, fontPath + MAX_PATH - font, ffd.cFileName);
-				int ret = AddFontResourceEx(fontPath, FR_PRIVATE, 0);
+				int ret = AddFontResourceExW(fontPath, FR_PRIVATE, 0);
 				if (debug && logFile)
 				{
 					GenericStringBuffer<UTF8<>> filename;
@@ -441,7 +441,7 @@ void LoadUserFonts(const wchar_t *path)
 					}
 				}
 			}
-		} while (FindNextFile(hFind, &ffd) != 0);
+		} while (FindNextFileW(hFind, &ffd) != 0);
 		FindClose(hFind);
 	}
 	else
@@ -474,14 +474,14 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 		DisableThreadLibraryCalls(hModule);
 
 #if _DEBUG
-		MessageBox(0, L"DLL_PROCESS_ATTACH", L"", 0);
+		MessageBoxW(0, L"DLL_PROCESS_ATTACH", L"", 0);
 #endif
 
 		if (!LoadDLL())
 			return FALSE;
 
 		wchar_t path[MAX_PATH];
-		if (GetModuleFileName(hModule, path, MAX_PATH))
+		if (GetModuleFileNameW(hModule, path, MAX_PATH))
 		{
 			auto c = wcsrchr(path, L'\\');
 			if (c) c[1] = L'\0';
@@ -509,7 +509,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 		{
 			wchar_t msg[512];
 			swprintf_s(msg, L"加载配置文件时出现错误!\n%s", errMsg);
-			MessageBox(0, msg, L"Error", MB_ICONERROR);
+			MessageBoxW(0, msg, L"Error", MB_ICONERROR);
 			return TRUE;
 		}
 
@@ -527,10 +527,10 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 		{
 		case USE_NCM_FONT:
 		{
-			NONCLIENTMETRICS ncm = { sizeof(ncm) };
-			if (SystemParametersInfo(SPI_GETNONCLIENTMETRICS, sizeof(NONCLIENTMETRICS), &ncm, 0))
+			NONCLIENTMETRICSW ncm = { sizeof(ncm) };
+			if (SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, 0))
 			{
-				newGSOFont = CreateFontIndirect(&ncm.lfMessageFont);
+				newGSOFont = CreateFontIndirectW(&ncm.lfMessageFont);
 				if (debug && logFile)
 				{
 					fprintf_s(logFile, "[DllMain] SystemParametersInfo NONCLIENTMETRICS.lfMessageFont.lfFaceName=\"%ls\"\r\n", ncm.lfMessageFont.lfFaceName);
@@ -546,12 +546,12 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 		break;
 		case USE_USER_FONT:
 		{
-			newGSOFont = CreateFontIndirect(&userGSOFont);
+			newGSOFont = CreateFontIndirectW(&userGSOFont);
 		}
 		break;
 		}
 
-		HMODULE hGdi32 = GetModuleHandle(L"gdi32.dll");
+		HMODULE hGdi32 = GetModuleHandleW(L"gdi32.dll");
 
 		if (fixGSOFont != DISABLED)
 		{

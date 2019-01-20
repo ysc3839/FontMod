@@ -592,10 +592,10 @@ FUNC(wod32Message)
 inline bool LoadDLL()
 {
 	wchar_t dllPath[MAX_PATH];
-	if (GetSystemDirectory(dllPath, _ARRAYSIZE(dllPath)) != 0)
+	if (GetSystemDirectoryW(dllPath, _ARRAYSIZE(dllPath)) != 0)
 	{
 		wcscat_s(dllPath, L"\\winmm.dll");
-		hDll = LoadLibrary(dllPath);
+		hDll = LoadLibraryW(dllPath);
 		if (hDll)
 		{
 #define GetAddr(name) _##name = GetProcAddress(hDll, #name);
