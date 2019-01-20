@@ -536,8 +536,12 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 				newGSOFont = CreateFontIndirectW(&ncm.lfMessageFont);
 				if (debug && logFile)
 				{
-					fprintf_s(logFile, "[DllMain] SystemParametersInfo NONCLIENTMETRICS.lfMessageFont.lfFaceName=\"%ls\"\r\n", ncm.lfMessageFont.lfFaceName);
-					fflush(logFile);
+					GenericStringBuffer<UTF8<>> name;
+					if (Utf16ToUtf8(ncm.lfMessageFont.lfFaceName, name))
+					{
+						fprintf_s(logFile, "[DllMain] SystemParametersInfo NONCLIENTMETRICS.lfMessageFont.lfFaceName=\"%s\"\r\n", name.GetString());
+						fflush(logFile);
+					}
 				}
 			}
 			else if (debug && logFile)
