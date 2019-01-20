@@ -200,7 +200,7 @@ bool LoadSettings(HMODULE hModule, const wchar_t *fileName, wchar_t *errMsg, GSO
 
 			GenericDocument<UTF16<>> dom;
 
-			if (dom.ParseStream<0, UTF8<>>(eis).HasParseError())
+			if (dom.ParseStream<kParseCommentsFlag | kParseTrailingCommasFlag, UTF8<>>(eis).HasParseError())
 			{
 				swprintf(errMsg, 512, L"解析 JSON 时出现错误! (%s, 偏移: %u)", GetParseError_Zh_Cn(dom.GetParseError()), dom.GetErrorOffset());
 				break;
