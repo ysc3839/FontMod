@@ -8,6 +8,7 @@
 
 #include "winmm.h"
 #include "HiDPI.h"
+#include "ConfigFile.h"
 
 #define RAPIDJSON_ERROR_CHARTYPE wchar_t
 #define RAPIDJSON_ERROR_STRING(x) L##x
@@ -497,7 +498,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 			FILE *file;
 			if (_wfopen_s(&file, jsonName, L"wb") == 0)
 			{
-				fputs("{\r\n\t\"fonts\": {\r\n\t\t\"SimSun\": {\r\n\t\t\t\"replace\": \"Microsoft YaHei UI\",\r\n\t\t\t\"#size\": 0,\r\n\t\t\t\"#width\": 0,\r\n\t\t\t\"#weight\": 0,\r\n\t\t\t\"#italic\": false,\r\n\t\t\t\"#underLine\": false,\r\n\t\t\t\"#strikeOut\": false,\r\n\t\t\t\"#charSet\": 0,\r\n\t\t\t\"#outPrecision\": 0,\r\n\t\t\t\"#clipPrecision\": 0,\r\n\t\t\t\"#quality\": 0,\r\n\t\t\t\"#pitchAndFamily\": 0\r\n\t\t}\r\n\t},\r\n\t\"debug\": false\r\n}\r\n", file);
+				fputs(configFile, file);
 				fclose(file);
 			}
 		}

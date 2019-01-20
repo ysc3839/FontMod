@@ -154,6 +154,7 @@
     <ClCompile Include="TGFont.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="ConfigFile.h" />
     <ClInclude Include="winmm.h" />
     <ClInclude Include="resource.h" />
   </ItemGroup>

@@ -6,6 +6,7 @@
   <ItemGroup>
     <ClInclude Include="resource.h" />
     <ClInclude Include="winmm.h" />
+    <ClInclude Include="ConfigFile.h" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="Resource.rc" />
