@@ -7,6 +7,7 @@
 #include <io.h>
 
 #include "winmm.h"
+#include "HiDPI.h"
 
 #define RAPIDJSON_ERROR_CHARTYPE wchar_t
 #define RAPIDJSON_ERROR_STRING(x) L##x
@@ -509,6 +510,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 		{
 			wchar_t msg[512];
 			swprintf_s(msg, L"加载配置文件时出现错误!\n%s", errMsg);
+
+			SetThreadDpiAware();
 			MessageBoxW(0, msg, L"Error", MB_ICONERROR);
 			return TRUE;
 		}
