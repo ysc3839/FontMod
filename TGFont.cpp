@@ -16,7 +16,7 @@
 #include "rapidjson/encodings.h"
 #include "rapidjson/filereadstream.h"
 #include "rapidjson/encodedstream.h"
-#include "rapidjson/error/zh_CN.h"
+#include "rapidjson_error_zh_CN.h"
 
 using namespace rapidjson;
 
