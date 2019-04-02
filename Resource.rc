@@ -50,8 +50,8 @@ END
 //
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 1,7,0,0
- PRODUCTVERSION 1,7,0,0
+ FILEVERSION 2,0,0,0
+ PRODUCTVERSION 2,0,0,0
  FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -67,13 +67,13 @@ BEGIN
         BLOCK "000004b0"
         BEGIN
             VALUE "CompanyName", "ysc3839"
-            VALUE "FileDescription", "Telegram font hook"
-            VALUE "FileVersion", "1.7.0.0"
-            VALUE "InternalName", "TGFont.dll"
+            VALUE "FileDescription", "FontMod"
+            VALUE "FileVersion", "2.0.0.0"
+            VALUE "InternalName", "FontMod.dll"
             VALUE "LegalCopyright", "Copyright (C) 2016-2019 ysc3839"
-            VALUE "OriginalFilename", "TGFont.dll"
-            VALUE "ProductName", "TGFont"
-            VALUE "ProductVersion", "1.7.0.0"
+            VALUE "OriginalFilename", "FontMod.dll"
+            VALUE "ProductName", "FontMod"
+            VALUE "ProductVersion", "2.0.0.0"
         END
     END
     BLOCK "VarFileInfo"
