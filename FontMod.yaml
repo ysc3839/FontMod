@@ -1,0 +1,31 @@
+style: &style
+# Remove '#' to override font style
+#  size: 0
+#  width: 0
+#  weight: 0
+#  italic: false
+#  underLine: false
+#  strikeOut: false
+#  charSet: 0
+#  outPrecision: 0
+#  clipPrecision: 0
+#  quality: 0
+#  pitchAndFamily: 0
+
+fonts:
+  SimSun: &zh-cn-font # Chinese (Simplified) fallback font
+    replace: Microsoft YaHei
+    <<: *style
+  PMingLiU: # Chinese (Traditional) fallback font
+    replace: Microsoft JhengHei UI
+    <<: *style
+  MS UI Gothic: # Japanese fallback font
+    replace: Yu Gothic UI
+    <<: *style
+  Gulim: # Korean fallback font
+    replace: 맑은 고딕
+    <<: *style
+
+fixGSOFont: true # true is to use system UI font
+#fixGSOFont: *zh-cn-font # Or replace with user defined font
+debug: false
