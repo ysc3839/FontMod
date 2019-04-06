@@ -5,10 +5,14 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="resource.h" />
-    <ClInclude Include="winmm.h" />
-    <ClInclude Include="ConfigFile.h" />
+    <ClInclude Include="Util.hpp" />
+    <ClInclude Include="DefConfigFile.hpp" />
+    <ClInclude Include="winmm.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="Resource.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <Natvis Include="yaml-cpp\src\contrib\yaml-cpp.natvis" />
   </ItemGroup>
 </Project>

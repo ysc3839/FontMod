@@ -2,24 +2,21 @@
 #define NOMINMAX
 #include <windows.h>
 #include <cstdint>
-#include <map>
+#include <unordered_map>
 #include <string>
-#include <io.h>
+#include <string_view>
+#include <fstream>
+#include <filesystem>
+namespace fs = std::filesystem;
 
-#include "winmm.h"
-#include "HiDPI.h"
-#include "ConfigFile.h"
+#include "yaml-cpp/yaml.h"
 
-#define RAPIDJSON_ERROR_CHARTYPE wchar_t
-#define RAPIDJSON_ERROR_STRING(x) L##x
-#include "rapidjson/document.h"
-#include "rapidjson/stringbuffer.h"
-#include "rapidjson/encodings.h"
-#include "rapidjson/filereadstream.h"
-#include "rapidjson/encodedstream.h"
-#include "rapidjson_error_zh_CN.h"
+#include "winmm.hpp"
+#include "Util.hpp"
+#include "DefConfigFile.hpp"
 
-using namespace rapidjson;
+#define CONFIG_FILE L"FontMod.yaml"
+#define LOG_FILE L"FontMod.log"
 
 #pragma pack(push, 1)
 struct jmp
@@ -69,12 +66,11 @@ enum GSOFontMode {
 	USE_USER_FONT // Use user defined font
 };
 
-std::map<std::wstring, font> fontsMap;
-bool debug = false;
+std::unordered_map<std::wstring, font> fontsMap;
 FILE *logFile = nullptr;
 HFONT newGSOFont = nullptr;
 
-__declspec(naked) HFONT WINAPI CallOrigCreateFontIndirectW(const LOGFONTW *lplf)
+__declspec(naked) HFONT WINAPI CallOrigCreateFontIndirectW(const LOGFONTW* lplf)
 {
 	_asm
 	{
@@ -96,37 +92,11 @@ __declspec(naked) HGDIOBJ WINAPI CallOrigGetStockObject(int i)
 	}
 }
 
-bool Utf8ToUtf16(const char *source, GenericStringBuffer<UTF16<>> &target)
+HFONT WINAPI MyCreateFontIndirectW(LOGFONTW* lplf)
 {
-	bool success = true;
-	GenericStringStream<UTF8<>> sourceStream(source);
-	while (sourceStream.Peek() != '\0')
-		if (!rapidjson::Transcoder<UTF8<>, UTF16<>>::Transcode(sourceStream, target))
-		{
-			success = true;
-			break;
-		}
-	return success;
-}
-
-bool Utf16ToUtf8(const wchar_t *source, GenericStringBuffer<UTF8<>> &target)
-{
-	bool success = true;
-	GenericStringStream<UTF16<>> sourceStream(source);
-	while (sourceStream.Peek() != '\0')
-		if (!rapidjson::Transcoder<UTF16<>, UTF8<>>::Transcode(sourceStream, target))
-		{
-			success = true;
-			break;
-		}
-	return success;
-}
-
-HFONT WINAPI MyCreateFontIndirectW(LOGFONTW *lplf)
-{
-	if (debug && logFile)
+	if (logFile)
 	{
-		GenericStringBuffer<UTF8<>> name;
+		std::string name;
 		if (Utf16ToUtf8(lplf->lfFaceName, name))
 		{
 #define bool_string(b) b != FALSE ? "true" : "false"
@@ -137,15 +107,14 @@ HFONT WINAPI MyCreateFontIndirectW(LOGFONTW *lplf)
 				"italic = %s, underline = %s, "
 				"strikeout = %s, charset = %d, "
 				"outprecision = %d, clipprecision = %d, "
-				"quality = %d, pitchandfamily = %d\r\n",
-				name.GetString(), lplf->lfHeight,
+				"quality = %d, pitchandfamily = %d\n",
+				name.c_str(), lplf->lfHeight,
 				lplf->lfWidth, lplf->lfEscapement,
 				lplf->lfOrientation, lplf->lfWeight,
 				bool_string(lplf->lfItalic), bool_string(lplf->lfUnderline),
 				bool_string(lplf->lfStrikeOut), lplf->lfCharSet,
 				lplf->lfOutPrecision, lplf->lfClipPrecision,
 				lplf->lfQuality, lplf->lfPitchAndFamily);
-			fflush(logFile);
 		}
 	}
 
@@ -183,285 +152,301 @@ HFONT WINAPI MyCreateFontIndirectW(LOGFONTW *lplf)
 
 HGDIOBJ WINAPI MyGetStockObject(int i)
 {
-	if (OEM_FIXED_FONT <= i && i <= DEFAULT_GUI_FONT && i != DEFAULT_PALETTE)
+	switch (i)
+	{
+	case OEM_FIXED_FONT:
+	case ANSI_FIXED_FONT:
+	case ANSI_VAR_FONT:
+	case SYSTEM_FONT:
+	case DEVICE_DEFAULT_FONT:
+	case SYSTEM_FIXED_FONT:
 		return newGSOFont;
+	}
 	return CallOrigGetStockObject(i);
 }
 
-bool LoadSettings(HMODULE hModule, const wchar_t *fileName, wchar_t *errMsg, GSOFontMode &fixGSOFont, LOGFONT &userGSOFont)
+bool LoadSettings(HMODULE hModule, const fs::path& fileName, wchar_t* errMsg, GSOFontMode& fixGSOFont, LOGFONT& userGSOFont, bool& debug)
 {
 	bool ret = false;
-	FILE *file;
-	if (_wfopen_s(&file, fileName, L"rb") == 0)
+	std::ifstream fin(fileName);
+	if (fin)
 	{
 		do {
-			char readBuffer[512];
-			FileReadStream is(file, readBuffer, sizeof(readBuffer));
-			EncodedInputStream<UTF8<>, FileReadStream> eis(is);
-
-			GenericDocument<UTF16<>> dom;
-
-			if (dom.ParseStream<kParseCommentsFlag | kParseTrailingCommasFlag, UTF8<>>(eis).HasParseError())
+			YAML::Node config;
+			try
 			{
-				swprintf(errMsg, 512, L"解析 JSON 时出现错误! (%s, 偏移: %u)", GetParseError_Zh_Cn(dom.GetParseError()), dom.GetErrorOffset());
+				config = YAML::Load(fin);
+			}
+			catch (const std::exception& e)
+			{
+				swprintf(errMsg, 512, L"YAML::Load error.\n%hs", e.what());
 				break;
 			}
 
-			if (!dom.IsObject())
+			if (!config.IsMap())
 			{
-				wcscpy_s(errMsg, 512, L"JSON 格式不合法, 根值不是 Object!");
+				swprintf(errMsg, 512, L"Root node is not a map.");
 				break;
 			}
 
-			auto member = dom.FindMember(L"fonts");
-			if (member != dom.MemberEnd() && member->value.IsObject())
+			if (auto node = FindNode(config, "fonts"); node && node.IsMap())
 			{
-				for (auto it = member->value.MemberBegin(); it != member->value.MemberEnd(); ++it)
+				for (const auto& i : node)
 				{
-					if (it->value.IsObject())
+					if (i.first.IsScalar() && i.second.IsMap())
 					{
-						std::wstring find = std::wstring(it->name.GetString(), it->name.GetStringLength());
-
-						auto replace = it->value.FindMember(L"replace");
-						if (replace != it->value.MemberEnd() && replace->value.IsString())
+						YAML::Node replace;
+						if (auto r = FindNode(i.second, "replace"); r && r.IsScalar())
+						{
+							replace = r;
+						}
+						else
+						{
+							replace = FindNode(i.second, "name");
+						}
+						if (replace && replace.IsScalar())
 						{
 							font fontInfo;
-							fontInfo.replace = std::wstring(replace->value.GetString(), replace->value.GetStringLength());
+							Utf8ToUtf16(replace.as<std::string>(), fontInfo.replace);
 							fontInfo.overrideFlags = _NONE;
 
-							auto member = it->value.FindMember(L"size");
-							if (member != it->value.MemberEnd() && member->value.IsInt())
+							if (auto node = FindNode(i.second, "size"); node && node.IsScalar())
 							{
-								fontInfo.overrideFlags |= _HEIGHT;
-								fontInfo.height = member->value.GetInt();
+								if (stol(node.as<std::string>(), fontInfo.height))
+									fontInfo.overrideFlags |= _HEIGHT;
 							}
 
-							member = it->value.FindMember(L"width");
-							if (member != it->value.MemberEnd() && member->value.IsInt())
+							if (auto node = FindNode(i.second, "width"); node && node.IsScalar())
 							{
-								fontInfo.overrideFlags |= _WIDTH;
-								fontInfo.width = member->value.GetInt();
+								if (stol(node.as<std::string>(), fontInfo.width))
+									fontInfo.overrideFlags |= _WIDTH;
 							}
 
-							member = it->value.FindMember(L"weight");
-							if (member != it->value.MemberEnd() && member->value.IsInt())
+							if (auto node = FindNode(i.second, "weight"); node && node.IsScalar())
 							{
-								fontInfo.overrideFlags |= _WEIGHT;
-								fontInfo.weight = member->value.GetInt();
+								if (stol(node.as<std::string>(), fontInfo.weight))
+									fontInfo.overrideFlags |= _WEIGHT;
 							}
 
-							member = it->value.FindMember(L"italic");
-							if (member != it->value.MemberEnd() && member->value.IsBool())
+							if (auto node = FindNode(i.second, "italic"); node && node.IsScalar())
 							{
 								fontInfo.overrideFlags |= _ITALIC;
-								fontInfo.italic = member->value.GetBool();
+								fontInfo.italic = node.as<bool>();
 							}
 
-							member = it->value.FindMember(L"underLine");
-							if (member != it->value.MemberEnd() && member->value.IsBool())
+							if (auto node = FindNode(i.second, "underLine"); node && node.IsScalar())
 							{
 								fontInfo.overrideFlags |= _UNDERLINE;
-								fontInfo.underLine = member->value.GetBool();
+								fontInfo.underLine = node.as<bool>();
 							}
 
-							member = it->value.FindMember(L"strikeOut");
-							if (member != it->value.MemberEnd() && member->value.IsBool())
+							if (auto node = FindNode(i.second, "strikeOut"); node && node.IsScalar())
 							{
 								fontInfo.overrideFlags |= _STRIKEOUT;
-								fontInfo.strikeOut = member->value.GetBool();
+								fontInfo.strikeOut = node.as<bool>();
 							}
 
-							member = it->value.FindMember(L"charSet");
-							if (member != it->value.MemberEnd() && member->value.IsInt())
+							if (auto node = FindNode(i.second, "charSet"); node && node.IsScalar())
 							{
-								fontInfo.overrideFlags |= _CHARSET;
-								fontInfo.charSet = member->value.GetInt();
+								unsigned long out;
+								if (stoul(node.as<std::string>(), out))
+								{
+									fontInfo.overrideFlags |= _CHARSET;
+									fontInfo.charSet = static_cast<BYTE>(out);
+								}
 							}
 
-							member = it->value.FindMember(L"outPrecision");
-							if (member != it->value.MemberEnd() && member->value.IsInt())
+							if (auto node = FindNode(i.second, "outPrecision"); node && node.IsScalar())
 							{
-								fontInfo.overrideFlags |= _OUTPRECISION;
-								fontInfo.outPrecision = member->value.GetInt();
+								unsigned long out;
+								if (stoul(node.as<std::string>(), out))
+								{
+									fontInfo.overrideFlags |= _OUTPRECISION;
+									fontInfo.outPrecision = static_cast<BYTE>(out);
+								}
 							}
 
-							member = it->value.FindMember(L"clipPrecision");
-							if (member != it->value.MemberEnd() && member->value.IsInt())
+							if (auto node = FindNode(i.second, "clipPrecision"); node && node.IsScalar())
 							{
-								fontInfo.overrideFlags |= _CLIPPRECISION;
-								fontInfo.clipPrecision = member->value.GetInt();
+								unsigned long out;
+								if (stoul(node.as<std::string>(), out))
+								{
+									fontInfo.overrideFlags |= _CLIPPRECISION;
+									fontInfo.clipPrecision = static_cast<BYTE>(out);
+								}
 							}
 
-							member = it->value.FindMember(L"quality");
-							if (member != it->value.MemberEnd() && member->value.IsInt())
+							if (auto node = FindNode(i.second, "quality"); node && node.IsScalar())
 							{
-								fontInfo.overrideFlags |= _QUALITY;
-								fontInfo.quality = member->value.GetInt();
+								unsigned long out;
+								if (stoul(node.as<std::string>(), out))
+								{
+									fontInfo.overrideFlags |= _QUALITY;
+									fontInfo.quality = static_cast<BYTE>(out);
+								}
 							}
 
-							member = it->value.FindMember(L"pitchAndFamily");
-							if (member != it->value.MemberEnd() && member->value.IsInt())
+							if (auto node = FindNode(i.second, "pitchAndFamily"); node && node.IsScalar())
 							{
-								fontInfo.overrideFlags |= _PITCHANDFAMILY;
-								fontInfo.pitchAndFamily = member->value.GetInt();
+								unsigned long out;
+								if (stoul(node.as<std::string>(), out))
+								{
+									fontInfo.overrideFlags |= _PITCHANDFAMILY;
+									fontInfo.pitchAndFamily = static_cast<BYTE>(out);
+								}
 							}
 
+							std::wstring find;
+							Utf8ToUtf16(i.first.as<std::string>(), find);
 							fontsMap[find] = fontInfo;
 						}
 					}
 				}
 			}
 
-			member = dom.FindMember(L"debug");
-			if (member != dom.MemberEnd() && member->value.IsBool())
-				debug = member->value.GetBool();
-
-			member = dom.FindMember(L"fixGSOFont");
-			if (member != dom.MemberEnd())
+			if (auto node = FindNode(config, "fixGSOFont"); node)
 			{
-				if (member->value.IsBool())
+				if (node.IsScalar())
 				{
-					if (member->value.GetBool())
+					if (node.as<bool>())
 						fixGSOFont = USE_NCM_FONT;
 				}
-				else if (member->value.IsObject())
+				else if (node.IsMap())
 				{
-					auto name = member->value.FindMember(L"name");
-					if (name != member->value.MemberEnd() && name->value.IsString())
+					YAML::Node name;
+					if (auto r = FindNode(node, "replace"); r && r.IsScalar())
+					{
+						name = r;
+					}
+					else
+					{
+						name = FindNode(node, "name");
+					}
+					if (name && name.IsScalar())
 					{
 						fixGSOFont = USE_USER_FONT;
-						memcpy_s(userGSOFont.lfFaceName, sizeof(userGSOFont.lfFaceName), name->value.GetString(), name->value.GetStringLength() * sizeof(decltype(name->value)::Ch));
 
-						auto m = member->value.FindMember(L"size");
-						if (m != member->value.MemberEnd() && m->value.IsInt())
+						std::wstring faceName;
+						Utf8ToUtf16(name.as<std::string>(), faceName);
+						memcpy_s(userGSOFont.lfFaceName, sizeof(userGSOFont.lfFaceName), faceName.c_str(), faceName.size() * sizeof(decltype(faceName)::value_type));
+
+						if (auto n = FindNode(node, "size"); n && n.IsScalar())
 						{
-							userGSOFont.lfHeight = m->value.GetInt();
+							stol(n.as<std::string>(), userGSOFont.lfHeight);
 						}
 
-						m = member->value.FindMember(L"width");
-						if (m != member->value.MemberEnd() && m->value.IsInt())
+						if (auto n = FindNode(node, "width"); n && n.IsScalar())
 						{
-							userGSOFont.lfWidth = m->value.GetInt();
+							stol(n.as<std::string>(), userGSOFont.lfWidth);
 						}
 
-						m = member->value.FindMember(L"weight");
-						if (m != member->value.MemberEnd() && m->value.IsInt())
+						if (auto n = FindNode(node, "weight"); n && n.IsScalar())
 						{
-							userGSOFont.lfWeight = m->value.GetInt();
+							stol(n.as<std::string>(), userGSOFont.lfWeight);
 						}
 
-						m = member->value.FindMember(L"italic");
-						if (m != member->value.MemberEnd() && m->value.IsBool())
+						if (auto n = FindNode(node, "italic"); n && n.IsScalar())
 						{
-							userGSOFont.lfItalic = m->value.GetBool();
+							userGSOFont.lfItalic = n.as<bool>();
 						}
 
-						m = member->value.FindMember(L"underLine");
-						if (m != member->value.MemberEnd() && m->value.IsBool())
+						if (auto n = FindNode(node, "underLine"); n && n.IsScalar())
 						{
-							userGSOFont.lfUnderline = m->value.GetBool();
+							userGSOFont.lfUnderline = n.as<bool>();
 						}
 
-						m = member->value.FindMember(L"strikeOut");
-						if (m != member->value.MemberEnd() && m->value.IsBool())
+						if (auto n = FindNode(node, "strikeOut"); n && n.IsScalar())
 						{
-							userGSOFont.lfStrikeOut = m->value.GetBool();
+							userGSOFont.lfStrikeOut = n.as<bool>();
 						}
 
-						m = member->value.FindMember(L"charSet");
-						if (m != member->value.MemberEnd() && m->value.IsInt())
+						if (auto n = FindNode(node, "charSet"); n && n.IsScalar())
 						{
-							userGSOFont.lfCharSet = m->value.GetInt();
+							unsigned long out;
+							stoul(n.as<std::string>(), out);
+							userGSOFont.lfCharSet = static_cast<BYTE>(out);
 						}
 
-						m = member->value.FindMember(L"outPrecision");
-						if (m != member->value.MemberEnd() && m->value.IsInt())
+						if (auto n = FindNode(node, "outPrecision"); n && n.IsScalar())
 						{
-							userGSOFont.lfOutPrecision = m->value.GetInt();
+							unsigned long out;
+							stoul(n.as<std::string>(), out);
+							userGSOFont.lfOutPrecision = static_cast<BYTE>(out);
 						}
 
-						m = member->value.FindMember(L"clipPrecision");
-						if (m != member->value.MemberEnd() && m->value.IsInt())
+						if (auto n = FindNode(node, "clipPrecision"); n && n.IsScalar())
 						{
-							userGSOFont.lfClipPrecision = m->value.GetInt();
+							unsigned long out;
+							stoul(n.as<std::string>(), out);
+							userGSOFont.lfClipPrecision = static_cast<BYTE>(out);
 						}
 
-						m = member->value.FindMember(L"quality");
-						if (m != member->value.MemberEnd() && m->value.IsInt())
+						if (auto n = FindNode(node, "quality"); n && n.IsScalar())
 						{
-							userGSOFont.lfQuality = m->value.GetInt();
+							unsigned long out;
+							stoul(n.as<std::string>(), out);
+							userGSOFont.lfQuality = static_cast<BYTE>(out);
 						}
 
-						m = member->value.FindMember(L"pitchAndFamily");
-						if (m != member->value.MemberEnd() && m->value.IsInt())
+						if (auto n = FindNode(node, "pitchAndFamily"); n && n.IsScalar())
 						{
-							userGSOFont.lfPitchAndFamily = m->value.GetInt();
+							unsigned long out;
+							stoul(n.as<std::string>(), out);
+							userGSOFont.lfPitchAndFamily = static_cast<BYTE>(out);
 						}
 					}
 				}
 			}
 
+			if (auto node = FindNode(config, "debug"); node && node.IsScalar())
+				debug = node.as<bool>();
+
 			ret = true;
 		} while (0);
-		fclose(file);
 	}
 	else
 	{
 #pragma warning(push)
 #pragma warning(disable: 4996) // 'strerror': This function or variable may be unsafe.
-		swprintf(errMsg, 512, L"无法打开 TGFont.json! (%hs)", strerror(errno));
+		swprintf(errMsg, 512, L"Can not open " CONFIG_FILE ".\n%hs", strerror(errno));
 #pragma warning(pop)
 	}
 	return ret;
 }
 
-void LoadUserFonts(const wchar_t *path)
+void LoadUserFonts(const fs::path& path)
 {
-	wchar_t fontPath[MAX_PATH];
-	wcscpy_s(fontPath, path);
-	wcscat_s(fontPath, L"fonts\\");
-	wchar_t *font = fontPath + wcslen(fontPath);
-	font[0] = L'*';
-	font[1] = 0;
-
-	WIN32_FIND_DATAW ffd;
-	HANDLE hFind = FindFirstFileW(fontPath, &ffd);
-	if (hFind != INVALID_HANDLE_VALUE)
+	try
 	{
-		do {
-			if ((ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != FILE_ATTRIBUTE_DIRECTORY)
+		auto fontsPath = path / L"fonts";
+		if (fs::is_directory(fontsPath))
+		{
+			for (auto& f : fs::directory_iterator(fontsPath))
 			{
-				wcscpy_s(font, fontPath + MAX_PATH - font, ffd.cFileName);
-				int ret = AddFontResourceExW(fontPath, FR_PRIVATE, 0);
-				if (debug && logFile)
+				if (f.is_directory()) continue;
+				int ret = AddFontResourceExW(f.path().c_str(), FR_PRIVATE, 0);
+				if (logFile)
 				{
-					GenericStringBuffer<UTF8<>> filename;
-					if (Utf16ToUtf8(ffd.cFileName, filename))
-					{
-						fprintf_s(logFile, "[LoadUserFonts] filename = \"%s\", ret = %d, lasterror = %d\r\n", filename.GetString(), ret, GetLastError());
-						fflush(logFile);
-					}
+					fprintf_s(logFile, "[LoadUserFonts] filename = \"%s\", ret = %d, lasterror = %d\n", f.path().filename().u8string().c_str(), ret, GetLastError());
 				}
 			}
-		} while (FindNextFileW(hFind, &ffd) != 0);
-		FindClose(hFind);
+		}
 	}
-	else
+	catch (const std::exception& e)
 	{
-		if (debug && logFile)
+		if (logFile)
 		{
-			fprintf_s(logFile, "[LoadUserFonts] FindFirstFile failed! (%d)\r\n", GetLastError());
-			fflush(logFile);
+			fprintf_s(logFile, "[LoadUserFonts] exception: \"%s\"\n", e.what());
 		}
 	}
 }
 
-void InlineHook(void *func, void *hookFunc, size_t *origAddr)
+void InlineHook(void* func, void* hookFunc, size_t* origAddr)
 {
 	DWORD oldProtect;
 	if (VirtualProtect(func, 5, PAGE_EXECUTE_READWRITE, &oldProtect))
 	{
-		jmp *hook = (jmp *)func;
+		jmp* hook = reinterpret_cast<jmp*>(func);
 		hook->opcode = 0xE9; // jmp
 		hook->address = (size_t)hookFunc - (size_t)func - 5;
 		*origAddr = (size_t)func + 5;
@@ -482,24 +467,15 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 		if (!LoadDLL())
 			return FALSE;
 
-		wchar_t path[MAX_PATH];
-		if (GetModuleFileNameW(hModule, path, MAX_PATH))
+		auto path = GetModuleFsPath(hModule);
+		auto configPath = path / CONFIG_FILE;
+		if (!fs::exists(configPath))
 		{
-			auto c = wcsrchr(path, L'\\');
-			if (c) c[1] = L'\0';
-		}
-
-		wchar_t jsonName[MAX_PATH];
-		wcscpy_s(jsonName, path);
-		wcscat_s(jsonName, L"TGFont.json");
-
-		if (_waccess_s(jsonName, 0) != 0)
-		{
-			FILE *file;
-			if (_wfopen_s(&file, jsonName, L"wb") == 0)
+			FILE* f;
+			if (_wfopen_s(&f, configPath.c_str(), L"wb") == 0)
 			{
-				fputs(configFile, file);
-				fclose(file);
+				fputs(defConfigFile, f);
+				fclose(f);
 			}
 		}
 
@@ -507,10 +483,11 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 		LOGFONT userGSOFont = {};
 
 		wchar_t errMsg[512];
-		if (!LoadSettings(hModule, jsonName, errMsg, fixGSOFont, userGSOFont))
+		bool debug;
+		if (!LoadSettings(hModule, configPath, errMsg, fixGSOFont, userGSOFont, debug))
 		{
 			wchar_t msg[512];
-			swprintf_s(msg, L"加载配置文件时出现错误!\n%s", errMsg);
+			swprintf_s(msg, L"LoadSettings error.\n%s", errMsg);
 
 			SetThreadDpiAware();
 			MessageBoxW(0, msg, L"Error", MB_ICONERROR);
@@ -519,10 +496,9 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 
 		if (debug)
 		{
-			wchar_t logName[MAX_PATH];
-			wcscpy_s(logName, path);
-			wcscat_s(logName, L"TGFont.log");
-			logFile = _wfsopen(logName, L"ab+", _SH_DENYWR);
+			auto logPath = path / LOG_FILE;
+			logFile = _wfsopen(logPath.c_str(), L"a+", _SH_DENYWR);
+			setvbuf(logFile, nullptr, _IOLBF, BUFSIZ);
 		}
 
 		LoadUserFonts(path);
@@ -535,20 +511,18 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 			if (SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, 0))
 			{
 				newGSOFont = CreateFontIndirectW(&ncm.lfMessageFont);
-				if (debug && logFile)
+				if (logFile)
 				{
-					GenericStringBuffer<UTF8<>> name;
+					std::string name;
 					if (Utf16ToUtf8(ncm.lfMessageFont.lfFaceName, name))
 					{
-						fprintf_s(logFile, "[DllMain] SystemParametersInfo NONCLIENTMETRICS.lfMessageFont.lfFaceName=\"%s\"\r\n", name.GetString());
-						fflush(logFile);
+						fprintf_s(logFile, "[DllMain] SystemParametersInfo NONCLIENTMETRICS.lfMessageFont.lfFaceName=\"%s\"\n", name.c_str());
 					}
 				}
 			}
-			else if (debug && logFile)
+			else if (logFile)
 			{
-				fprintf_s(logFile, "[DllMain] SystemParametersInfo failed! (%d)\r\n", GetLastError());
-				fflush(logFile);
+				fprintf_s(logFile, "[DllMain] SystemParametersInfo failed. (%d)\n", GetLastError());
 			}
 		}
 		break;
