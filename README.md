@@ -3,10 +3,10 @@
 
 Simple hook tool to change Win32 program font. Works with some GDI or Qt based program.
 
-> Tested works with [Telegram Desktop](https://desktop.telegram.org/) and [Kleopatra (Gpg4Win)](https://www.gpg4win.org/).
+> Proven workable on [Telegram Desktop](https://desktop.telegram.org/), [Kleopatra (Gpg4Win)](https://www.gpg4win.org/) and [Mendeley Desktop](https://www.mendeley.com/download-desktop/).
 
 # Usage
-[Download](https://github.com/ysc3839/FontMod/releases) `FontMod.dll` and rename to `winmm.dll`, then put in the folder of program exe.  
+[Download](https://github.com/ysc3839/FontMod/releases) `FontMod.dll` and rename to `winmm.dll`, then put in the folder of program exe.
 User font: Put fonts in `fonts` folder to use them directly, don't need to install to system.
 
 # Config file

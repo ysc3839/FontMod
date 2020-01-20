@@ -3,10 +3,10 @@
 
 修改 Win32 程序字体的简单的 hook 工具。可用于一些基于 GDI 或者 Qt 的程序。
 
-> 经测试可用于 [Telegram Desktop](https://desktop.telegram.org/) 和 [Kleopatra (Gpg4Win)](https://www.gpg4win.org/)。
+> 经测试可用于 [Telegram Desktop](https://desktop.telegram.org/)、[Kleopatra (Gpg4Win)](https://www.gpg4win.org/) 和 [Mendeley Desktop](https://www.mendeley.com/download-desktop/)。
 
 # 使用方法
-[下载](https://github.com/ysc3839/FontMod/releases) `FontMod.dll` 并重命名为 `winmm.dll`，然后放在程序 exe 所在的文件夹里。  
+[下载](https://github.com/ysc3839/FontMod/releases) `FontMod.dll` 并重命名为 `winmm.dll`，然后放在程序 exe 所在的文件夹里。
 用户字体：把字体文件放在 `fonts` 文件夹内，可以直接使用，无需安装到系统中。
 
 # 配置文件
