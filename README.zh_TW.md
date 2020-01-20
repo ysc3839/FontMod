@@ -6,7 +6,7 @@
 > 經測試可用於 [Telegram Desktop](https://desktop.telegram.org/)、[Kleopatra (Gpg4Win)](https://www.gpg4win.org/) 和 [Mendeley Desktop](https://www.mendeley.com/download-desktop/)。
 
 # 使用方法
-[下載](https://github.com/ysc3839/FontMod/releases) `FontMod.dll` 並更名為 `winmm.dll`，然後放在程式 exe 所在的檔案夾裏。
+[下載](https://github.com/ysc3839/FontMod/releases) `FontMod.dll` 並更名為 `winmm.dll`，然後放在程式 exe 所在的檔案夾裏。  
 使用者字型: 把字型檔案放在 `fonts` 檔案夾內，可以直接使用，無需安裝到系統中。
 
 # 組態檔案
