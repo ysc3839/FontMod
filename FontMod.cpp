@@ -18,16 +18,12 @@ namespace fs = std::filesystem;
 #define CONFIG_FILE L"FontMod.yaml"
 #define LOG_FILE L"FontMod.log"
 
-#pragma pack(push, 1)
-struct jmp
+extern "C"
 {
-	uint8_t opcode;
-	size_t address;
-};
-#pragma pack(pop)
+	size_t addrCreateFontIndirectW = 0;
+	size_t addrGetStockObject = 0;
+}
 
-size_t addrCreateFontIndirectW = 0;
-size_t addrGetStockObject = 0;
 
 // overrideflags
 #define	_NONE 0
@@ -70,27 +66,34 @@ std::unordered_map<std::wstring, font> fontsMap;
 FILE *logFile = nullptr;
 HFONT newGSOFont = nullptr;
 
-__declspec(naked) HFONT WINAPI CallOrigCreateFontIndirectW(const LOGFONTW* lplf)
-{
-	_asm
-	{
-		mov edi, edi
-		push ebp
-		mov ebp, esp
-		jmp addrCreateFontIndirectW
-	}
-}
+//__declspec(naked) HFONT WINAPI CallOrigCreateFontIndirectW(const LOGFONTW* lplf)
+//{
+//	_asm
+//	{
+//		mov edi, edi
+//		push ebp
+//		mov ebp, esp
+//		push ecx
+//		jmp addrCreateFontIndirectW
+//	}
+//}
+//
+//__declspec(naked) HGDIOBJ WINAPI CallOrigGetStockObject(int i)
+//{
+//	_asm
+//	{
+//		mov edi, edi
+//		push ebp
+//		mov ebp, esp
+//		push ecx
+//		jmp addrGetStockObject
+//	}
+//}
 
-__declspec(naked) HGDIOBJ WINAPI CallOrigGetStockObject(int i)
-{
-	_asm
-	{
-		mov edi, edi
-		push ebp
-		mov ebp, esp
-		jmp addrGetStockObject
-	}
-}
+extern "C" HFONT WINAPI CallOrigCreateFontIndirectW(const LOGFONTW * lplf);
+extern "C" HGDIOBJ WINAPI CallOrigGetStockObject(int i);
+
+
 
 HFONT WINAPI MyCreateFontIndirectW(LOGFONTW* lplf)
 {
@@ -441,17 +444,46 @@ void LoadUserFonts(const fs::path& path)
 	}
 }
 
-void InlineHook(void* func, void* hookFunc, size_t* origAddr)
+void InlineHook(void* func, void* hookFunc, size_t* origAddr, size_t nopSize)
 {
 	DWORD oldProtect;
-	if (VirtualProtect(func, 5, PAGE_EXECUTE_READWRITE, &oldProtect))
+	BYTE* hook = (BYTE*)func;
+#ifdef _WIN64
+	if (VirtualProtect(func, 14 + nopSize, PAGE_EXECUTE_READWRITE, &oldProtect))
 	{
-		jmp* hook = reinterpret_cast<jmp*>(func);
-		hook->opcode = 0xE9; // jmp
-		hook->address = (size_t)hookFunc - (size_t)func - 5;
-		*origAddr = (size_t)func + 5;
-		VirtualProtect(func, 5, oldProtect, &oldProtect);
+		// push addr
+		*(BYTE*)hook = 0x68;
+		*(DWORD*)(hook + 1) = (size_t)hookFunc & 0xffffffff;
+		// mov dword ptr [rsp+4], addr HIGH
+		*(DWORD*)(hook + 5) = 0x042444c7;
+		*(DWORD*)(hook + 9) = (size_t)hookFunc >> 32;
+		// ret
+		*(BYTE*)(hook + 13) = 0xc3;
+		// nop
+		for (size_t i = 0; i < nopSize; ++i)
+		{
+			*(BYTE*)(hook + 14 + i) = 0x90;
+		}
+		VirtualProtect(func, 14 + nopSize, oldProtect, &oldProtect);
+		*origAddr = (size_t)func + 14 + nopSize;
 	}
+#else
+	if (VirtualProtect(func, 6 + nopSize, PAGE_EXECUTE_READWRITE, &oldProtect))
+	{
+		// push addr
+		*(BYTE*)hook = 0x68;
+		*(DWORD*)(hook + 1) = (DWORD)hookFunc;
+		// ret
+		*(BYTE*)(hook + 5) = 0xc3;
+		// nop
+		for (size_t i = 0; i < nopSize; ++i)
+		{
+			*(BYTE*)(hook + 6 + i) = 0x90;
+		}
+		VirtualProtect(func, 6 + nopSize, oldProtect, &oldProtect);
+		*origAddr = (size_t)func + 6 + nopSize;
+	}
+#endif
 }
 
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved)
@@ -540,14 +572,24 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 			auto pfnGetStockObject = GetProcAddress(hGdi32, "GetStockObject");
 			if (pfnGetStockObject)
 			{
-				InlineHook(pfnGetStockObject, MyGetStockObject, &addrGetStockObject);
+#ifdef _WIN64
+				InlineHook(pfnGetStockObject, MyGetStockObject, &addrGetStockObject, 2);
+
+#else
+				InlineHook(pfnGetStockObject, MyGetStockObject, &addrGetStockObject, 0);
+#endif
 			}
 		}
 
 		auto pfnCreateFontIndirectW = GetProcAddress(hGdi32, "CreateFontIndirectW");
 		if (pfnCreateFontIndirectW)
 		{
-			InlineHook(pfnCreateFontIndirectW, MyCreateFontIndirectW, &addrCreateFontIndirectW);
+#ifdef _WIN64
+			InlineHook(pfnCreateFontIndirectW, MyCreateFontIndirectW, &addrCreateFontIndirectW, 3);
+#else
+			InlineHook(pfnCreateFontIndirectW, MyCreateFontIndirectW, &addrCreateFontIndirectW, 0);
+#endif
+
 		}
 	}
 	else if (ul_reason_for_call == DLL_PROCESS_DETACH)

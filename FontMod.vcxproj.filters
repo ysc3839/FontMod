@@ -15,4 +15,7 @@
   <ItemGroup>
     <Natvis Include="yaml-cpp\src\contrib\yaml-cpp.natvis" />
   </ItemGroup>
+  <ItemGroup>
+    <MASM Include="winmm.asm" />
+  </ItemGroup>
 </Project>
