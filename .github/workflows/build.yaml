@@ -1,0 +1,43 @@
+name: Build
+
+on:
+  push:
+    tags: [ '**' ]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        submodules: true
+    - run: build.bat
+      shell: cmd
+    - uses: actions/upload-artifact@v1
+      with:
+        name: FontMod.pdb
+        path: build/Release/FontMod.pdb
+    - uses: actions/upload-artifact@v1
+      with:
+        name: FontMod.dll
+        path: build/Release/FontMod.dll
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: ${{ github.ref }}
+        draft: true
+        prerelease: false
+    - name: Upload Release Asset
+      id: upload-release-asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: build/Release/FontMod.dll
+        asset_name: FontMod.dll
+        asset_content_type: application/octet-stream
