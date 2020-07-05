@@ -1,0 +1,19 @@
+cmake_minimum_required(VERSION 3.1)
+include(ExternalProject)
+
+set(detours_path ${CMAKE_CURRENT_LIST_DIR}/Detours)
+
+if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+	set(DETOURS_TARGET_PROCESSOR X64)
+elseif(CMAKE_SIZEOF_VOID_P EQUAL 4)
+	set(DETOURS_TARGET_PROCESSOR X86)
+endif()
+
+ExternalProject_Add(
+	detours
+	SOURCE_DIR ${detours_path}/src
+	CONFIGURE_COMMAND ""
+	BUILD_COMMAND nmake DETOURS_TARGET_PROCESSOR=${DETOURS_TARGET_PROCESSOR}
+	INSTALL_COMMAND ""
+	BUILD_IN_SOURCE 1
+)

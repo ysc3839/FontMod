@@ -11,4 +11,6 @@ set(YAML_CPP_INSTALL OFF CACHE BOOL "Enable generation of install target")
 set(MSVC_SHARED_RT OFF CACHE BOOL "MSVC: Build with shared runtime libs (/MD)")
 add_subdirectory("yaml-cpp")
 
-add_dependencies(${PROJECT_NAME} "yaml-cpp")
+include(detours.cmake)
+
+add_dependencies(${PROJECT_NAME} "yaml-cpp" "detours")

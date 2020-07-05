@@ -10,6 +10,7 @@
 namespace fs = std::filesystem;
 
 #include "yaml-cpp/yaml.h"
+#include "detours.h"
 
 #include "winmm.hpp"
 #include "Util.hpp"
@@ -18,16 +19,8 @@ namespace fs = std::filesystem;
 #define CONFIG_FILE L"FontMod.yaml"
 #define LOG_FILE L"FontMod.log"
 
-#pragma pack(push, 1)
-struct jmp
-{
-	uint8_t opcode;
-	size_t address;
-};
-#pragma pack(pop)
-
-size_t addrCreateFontIndirectW = 0;
-size_t addrGetStockObject = 0;
+auto addrCreateFontIndirectW = CreateFontIndirectW;
+auto addrGetStockObject = GetStockObject;
 
 // overrideflags
 #define	_NONE 0
@@ -69,28 +62,6 @@ enum GSOFontMode {
 std::unordered_map<std::wstring, font> fontsMap;
 FILE *logFile = nullptr;
 HFONT newGSOFont = nullptr;
-
-__declspec(naked) HFONT WINAPI CallOrigCreateFontIndirectW(const LOGFONTW* lplf)
-{
-	_asm
-	{
-		mov edi, edi
-		push ebp
-		mov ebp, esp
-		jmp addrCreateFontIndirectW
-	}
-}
-
-__declspec(naked) HGDIOBJ WINAPI CallOrigGetStockObject(int i)
-{
-	_asm
-	{
-		mov edi, edi
-		push ebp
-		mov ebp, esp
-		jmp addrGetStockObject
-	}
-}
 
 HFONT WINAPI MyCreateFontIndirectW(LOGFONTW* lplf)
 {
@@ -147,7 +118,7 @@ HFONT WINAPI MyCreateFontIndirectW(LOGFONTW* lplf)
 		if ((it->second.overrideFlags & _PITCHANDFAMILY) == _PITCHANDFAMILY)
 			lplf->lfPitchAndFamily = it->second.pitchAndFamily;
 	}
-	return CallOrigCreateFontIndirectW(lplf);
+	return addrCreateFontIndirectW(lplf);
 }
 
 HGDIOBJ WINAPI MyGetStockObject(int i)
@@ -162,7 +133,7 @@ HGDIOBJ WINAPI MyGetStockObject(int i)
 	case SYSTEM_FIXED_FONT:
 		return newGSOFont;
 	}
-	return CallOrigGetStockObject(i);
+	return addrGetStockObject(i);
 }
 
 bool LoadSettings(HMODULE hModule, const fs::path& fileName, wchar_t* errMsg, GSOFontMode& fixGSOFont, LOGFONT& userGSOFont, bool& debug)
@@ -441,19 +412,6 @@ void LoadUserFonts(const fs::path& path)
 	}
 }
 
-void InlineHook(void* func, void* hookFunc, size_t* origAddr)
-{
-	DWORD oldProtect;
-	if (VirtualProtect(func, 5, PAGE_EXECUTE_READWRITE, &oldProtect))
-	{
-		jmp* hook = reinterpret_cast<jmp*>(func);
-		hook->opcode = 0xE9; // jmp
-		hook->address = (size_t)hookFunc - (size_t)func - 5;
-		*origAddr = (size_t)func + 5;
-		VirtualProtect(func, 5, oldProtect, &oldProtect);
-	}
-}
-
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved)
 {
 	if (ul_reason_for_call == DLL_PROCESS_ATTACH)
@@ -533,21 +491,24 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 		break;
 		}
 
-		HMODULE hGdi32 = GetModuleHandleW(L"gdi32.dll");
+		DetourTransactionBegin();
+		DetourUpdateThread(GetCurrentThread());
 
 		if (fixGSOFont != DISABLED)
 		{
-			auto pfnGetStockObject = GetProcAddress(hGdi32, "GetStockObject");
-			if (pfnGetStockObject)
-			{
-				InlineHook(pfnGetStockObject, MyGetStockObject, &addrGetStockObject);
-			}
+			DetourAttach(&(PVOID&)addrGetStockObject, MyGetStockObject);
 		}
+		DetourAttach(&(PVOID&)addrCreateFontIndirectW, MyCreateFontIndirectW);
 
-		auto pfnCreateFontIndirectW = GetProcAddress(hGdi32, "CreateFontIndirectW");
-		if (pfnCreateFontIndirectW)
+		auto error = DetourTransactionCommit();
+		if (error != ERROR_SUCCESS)
 		{
-			InlineHook(pfnCreateFontIndirectW, MyCreateFontIndirectW, &addrCreateFontIndirectW);
+			wchar_t msg[512];
+			swprintf_s(msg, L"DetourTransactionCommit error: %d", error);
+
+			SetThreadDpiAware();
+			MessageBoxW(0, msg, L"Error", MB_ICONERROR);
+			return TRUE;
 		}
 	}
 	else if (ul_reason_for_call == DLL_PROCESS_DETACH)
