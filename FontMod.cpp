@@ -63,7 +63,7 @@ std::unordered_map<std::wstring, font> fontsMap;
 FILE *logFile = nullptr;
 HFONT newGSOFont = nullptr;
 
-HFONT WINAPI MyCreateFontIndirectW(LOGFONTW* lplf)
+HFONT WINAPI MyCreateFontIndirectW(const LOGFONTW* lplf)
 {
 	if (logFile)
 	{
@@ -89,34 +89,40 @@ HFONT WINAPI MyCreateFontIndirectW(LOGFONTW* lplf)
 		}
 	}
 
+	LOGFONTW lf;
+
 	auto it = fontsMap.find(lplf->lfFaceName);
 	if (it != fontsMap.end())
 	{
-		size_t len = it->second.replace._Copy_s(lplf->lfFaceName, LF_FACESIZE, LF_FACESIZE);
-		lplf->lfFaceName[len] = L'\0';
+		lf = *lplf;
+
+		size_t len = it->second.replace._Copy_s(lf.lfFaceName, LF_FACESIZE, LF_FACESIZE);
+		lf.lfFaceName[len] = L'\0';
 
 		if ((it->second.overrideFlags & _HEIGHT) == _HEIGHT)
-			lplf->lfHeight = it->second.height;
+			lf.lfHeight = it->second.height;
 		if ((it->second.overrideFlags & _WIDTH) == _WIDTH)
-			lplf->lfWidth = it->second.width;
+			lf.lfWidth = it->second.width;
 		if ((it->second.overrideFlags & _WEIGHT) == _WEIGHT)
-			lplf->lfWeight = it->second.weight;
+			lf.lfWeight = it->second.weight;
 		if ((it->second.overrideFlags & _ITALIC) == _ITALIC)
-			lplf->lfItalic = it->second.italic;
+			lf.lfItalic = it->second.italic;
 		if ((it->second.overrideFlags & _UNDERLINE) == _UNDERLINE)
-			lplf->lfUnderline = it->second.underLine;
+			lf.lfUnderline = it->second.underLine;
 		if ((it->second.overrideFlags & _STRIKEOUT) == _STRIKEOUT)
-			lplf->lfStrikeOut = it->second.strikeOut;
+			lf.lfStrikeOut = it->second.strikeOut;
 		if ((it->second.overrideFlags & _CHARSET) == _CHARSET)
-			lplf->lfCharSet = it->second.charSet;
+			lf.lfCharSet = it->second.charSet;
 		if ((it->second.overrideFlags & _OUTPRECISION) == _OUTPRECISION)
-			lplf->lfOutPrecision = it->second.outPrecision;
+			lf.lfOutPrecision = it->second.outPrecision;
 		if ((it->second.overrideFlags & _CLIPPRECISION) == _CLIPPRECISION)
-			lplf->lfClipPrecision = it->second.clipPrecision;
+			lf.lfClipPrecision = it->second.clipPrecision;
 		if ((it->second.overrideFlags & _QUALITY) == _QUALITY)
-			lplf->lfQuality = it->second.quality;
+			lf.lfQuality = it->second.quality;
 		if ((it->second.overrideFlags & _PITCHANDFAMILY) == _PITCHANDFAMILY)
-			lplf->lfPitchAndFamily = it->second.pitchAndFamily;
+			lf.lfPitchAndFamily = it->second.pitchAndFamily;
+
+		lplf = &lf;
 	}
 	return addrCreateFontIndirectW(lplf);
 }
