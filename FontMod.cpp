@@ -12,8 +12,8 @@ namespace fs = std::filesystem;
 #include "yaml-cpp/yaml.h"
 #include "detours.h"
 
-#include "winmm.hpp"
 #include "Util.hpp"
+#include "dllstub.hpp"
 #include "DefConfigFile.hpp"
 
 #define CONFIG_FILE L"FontMod.yaml"
@@ -428,10 +428,10 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 		MessageBoxW(0, L"DLL_PROCESS_ATTACH", L"", 0);
 #endif
 
-		if (!LoadDLL())
-			return FALSE;
-
 		auto path = GetModuleFsPath(hModule);
+		LoadDLL(path.filename());
+
+		path = path.remove_filename();
 		auto configPath = path / CONFIG_FILE;
 		if (!fs::exists(configPath))
 		{

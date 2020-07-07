@@ -7,12 +7,18 @@
     <ClInclude Include="resource.h" />
     <ClInclude Include="Util.hpp" />
     <ClInclude Include="DefConfigFile.hpp" />
-    <ClInclude Include="winmm.hpp" />
+    <ClInclude Include="dllstub.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="Resource.rc" />
   </ItemGroup>
   <ItemGroup>
     <Natvis Include="yaml-cpp\src\contrib\yaml-cpp.natvis" />
+  </ItemGroup>
+  <ItemGroup>
+    <MASM Include="dllstub.asm" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="dllstub.def" />
   </ItemGroup>
 </Project>

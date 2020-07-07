@@ -146,7 +146,7 @@ auto GetModuleFsPath(HMODULE hModule)
 	do
 	{
 		pathSize = static_cast<DWORD>(path.size());
-		actualSize = GetModuleFileNameW(nullptr, path.data(), pathSize);
+		actualSize = GetModuleFileNameW(hModule, path.data(), pathSize);
 
 		if (actualSize + 1 > pathSize)
 		{
@@ -155,7 +155,7 @@ auto GetModuleFsPath(HMODULE hModule)
 	} while (actualSize + 1 > pathSize);
 
 	path.resize(actualSize);
-	return fs::path(path).remove_filename();
+	return fs::path(path);
 }
 
 void SetThreadDpiAware()
@@ -168,4 +168,26 @@ void SetThreadDpiAware()
 		if (funcPtr)
 			funcPtr(DPI_AWARENESS_CONTEXT_SYSTEM_AWARE);
 	}
+}
+
+auto GetSysDirFsPath()
+{
+	std::wstring path(MAX_PATH, L'\0');
+	while (1)
+	{
+		const UINT pathSize = static_cast<UINT>(path.size());
+		const UINT requiredSize = GetSystemDirectoryW(path.data(), pathSize);
+		path.resize(requiredSize);
+
+		if (requiredSize < pathSize)
+			break;
+	}
+	return fs::path(path);
+}
+
+// https://stackoverflow.com/a/4119881/6911112
+bool iequals(std::wstring_view a, std::wstring_view b)
+{
+	return (a.size() == b.size()) && std::equal(a.begin(), a.end(), b.begin(), b.end(),
+		[](wchar_t a, wchar_t b) { return a == b || tolower(a) == tolower(b); });
 }
