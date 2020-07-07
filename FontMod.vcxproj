@@ -75,24 +75,28 @@
     <GenerateManifest>false</GenerateManifest>
     <IncludePath>./yaml-cpp/include;./Detours/include;$(IncludePath)</IncludePath>
     <LibraryPath>$(SolutionDir)\yaml-cpp\$(Configuration);.\Detours\lib.$(PlatformTarget);$(LibraryPath)</LibraryPath>
+    <TargetName>$(ProjectName)$(PlatformArchitecture)</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
     <GenerateManifest>false</GenerateManifest>
     <IncludePath>./yaml-cpp/include;./Detours/include;$(IncludePath)</IncludePath>
     <LibraryPath>$(SolutionDir)\yaml-cpp\$(Configuration);.\Detours\lib.$(PlatformTarget);$(LibraryPath)</LibraryPath>
+    <TargetName>$(ProjectName)$(PlatformArchitecture)</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
     <GenerateManifest>false</GenerateManifest>
     <IncludePath>./yaml-cpp/include;./Detours/include;$(IncludePath)</IncludePath>
     <LibraryPath>$(SolutionDir)\yaml-cpp\$(Configuration);.\Detours\lib.$(PlatformTarget);$(LibraryPath)</LibraryPath>
+    <TargetName>$(ProjectName)$(PlatformArchitecture)</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
     <GenerateManifest>false</GenerateManifest>
     <IncludePath>./yaml-cpp/include;./Detours/include;$(IncludePath)</IncludePath>
     <LibraryPath>$(SolutionDir)\yaml-cpp\$(Configuration);.\Detours\lib.$(PlatformTarget);$(LibraryPath)</LibraryPath>
+    <TargetName>$(ProjectName)$(PlatformArchitecture)</TargetName>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
