@@ -19,7 +19,7 @@ namespace fs = std::filesystem;
 #define CONFIG_FILE L"FontMod.yaml"
 #define LOG_FILE L"FontMod.log"
 
-auto addrCreateFontIndirectW = CreateFontIndirectW;
+auto addrCreateFontIndirectExW = CreateFontIndirectExW;
 auto addrGetStockObject = GetStockObject;
 
 // overrideflags
@@ -63,8 +63,10 @@ std::unordered_map<std::wstring, font> fontsMap;
 FILE *logFile = nullptr;
 HFONT newGSOFont = nullptr;
 
-HFONT WINAPI MyCreateFontIndirectW(const LOGFONTW* lplf)
+HFONT WINAPI MyCreateFontIndirectExW(const ENUMLOGFONTEXDVW* lpelf)
 {
+	auto lplf = &lpelf->elfEnumLogfontEx.elfLogFont;
+
 	if (logFile)
 	{
 		std::string name;
@@ -89,12 +91,13 @@ HFONT WINAPI MyCreateFontIndirectW(const LOGFONTW* lplf)
 		}
 	}
 
-	LOGFONTW lf;
+	ENUMLOGFONTEXDVW elf;
 
 	auto it = fontsMap.find(lplf->lfFaceName);
 	if (it != fontsMap.end())
 	{
-		lf = *lplf;
+		elf = *lpelf;
+		LOGFONTW& lf = elf.elfEnumLogfontEx.elfLogFont;
 
 		size_t len = it->second.replace._Copy_s(lf.lfFaceName, LF_FACESIZE, LF_FACESIZE);
 		lf.lfFaceName[len] = L'\0';
@@ -122,9 +125,9 @@ HFONT WINAPI MyCreateFontIndirectW(const LOGFONTW* lplf)
 		if ((it->second.overrideFlags & _PITCHANDFAMILY) == _PITCHANDFAMILY)
 			lf.lfPitchAndFamily = it->second.pitchAndFamily;
 
-		lplf = &lf;
+		lpelf = &elf;
 	}
-	return addrCreateFontIndirectW(lplf);
+	return addrCreateFontIndirectExW(lpelf);
 }
 
 HGDIOBJ WINAPI MyGetStockObject(int i)
@@ -497,6 +500,18 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 		break;
 		}
 
+		auto hGdiFull = GetModuleHandleW(L"gdi32full.dll");
+		if (hGdiFull)
+		{
+			auto addrGetStockObjectFull = reinterpret_cast<decltype(GetStockObject)*>(GetProcAddress(hGdiFull, "GetStockObject"));
+			if (addrGetStockObjectFull)
+				addrGetStockObject = addrGetStockObjectFull;
+
+			auto addrCreateFontIndirectExWFull = reinterpret_cast<decltype(CreateFontIndirectExW)*>(GetProcAddress(hGdiFull, "CreateFontIndirectExW"));
+			if (addrCreateFontIndirectExWFull)
+				addrCreateFontIndirectExW = addrCreateFontIndirectExWFull;
+		}
+
 		DetourTransactionBegin();
 		DetourUpdateThread(GetCurrentThread());
 
@@ -504,7 +519,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 		{
 			DetourAttach(&(PVOID&)addrGetStockObject, MyGetStockObject);
 		}
-		DetourAttach(&(PVOID&)addrCreateFontIndirectW, MyCreateFontIndirectW);
+		DetourAttach(&(PVOID&)addrCreateFontIndirectExW, MyCreateFontIndirectExW);
 
 		auto error = DetourTransactionCommit();
 		if (error != ERROR_SUCCESS)
