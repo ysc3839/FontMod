@@ -55,8 +55,8 @@ debug: false
 替換 [GetStockObject](https://docs.microsoft.com/en-us/windows/desktop/api/winuser/nf-winuser-getsyscolorbrush) 字型，選項與前面的 `fonts` 相同。若設為 `true` 則會使用 [SystemParametersInfo](https://docs.microsoft.com/en-us/windows/desktop/api/winuser/nf-winuser-systemparametersinfow#spi_getnonclientmetrics) 獲取系統字型。
 
 * debug
-除錯模式 (會記錄相關信息到 FontMod.log)。
+除錯模式 (會記錄相關訊息到 FontMod.log)。
 
-> YAML 支援 `錨點(&)` 和 `參照(*)` (請參見 [維基百科](https://zh.wikipedia.org/wiki/YAML#%E8%B3%87%E6%96%99%E5%90%88%E4%BD%B5%E5%92%8C%E5%8F%83%E8%80%83))，此工具還支援 YAML 標準中非強制的[鍵值合併](https://yaml.org/type/merge.html) (Merge Key) 功能。你可以像上面的組態檔案那樣重復使用數據，而不需要像 JSON 那樣把數據復制多份。
+> YAML 支援 `錨點(&)` 和 `參照(*)` (請參見 [維基百科](https://zh.wikipedia.org/wiki/YAML#%E8%B3%87%E6%96%99%E5%90%88%E4%BD%B5%E5%92%8C%E5%8F%83%E8%80%83))，此工具還支援 YAML 標準中非強制的[鍵值合併](https://yaml.org/type/merge.html) (Merge Key) 功能。你可以像上面的組態檔案那樣重復使用數據，而不需要像 JSON 那樣把數據複製多份。
 
 > 如果只想替換 CJK 字型，保留英文字型不變，你需要將 "key" 設為 CJK 的 fallback 字型。這個字型在不同語言環境下可能不一樣 (比如簡體中文是 SimSun)，你可以使用 debug 模式找到對應的字型。
