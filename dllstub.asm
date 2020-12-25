@@ -357,4 +357,11 @@ FuncStub VerLanguageNameW
 FuncStub VerQueryValueA
 FuncStub VerQueryValueW
 
+; msimg32
+FuncStub AlphaBlend
+FuncStub DllInitialize
+FuncStub GradientFill
+FuncStub TransparentBlt
+FuncStub vSetDdrawflag
+
 end

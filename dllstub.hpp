@@ -347,6 +347,13 @@ extern "C"
 	FuncAddr(VerLanguageNameW);
 	FuncAddr(VerQueryValueA);
 	FuncAddr(VerQueryValueW);
+
+	// msimg32
+	FuncAddr(AlphaBlend);
+	FuncAddr(DllInitialize);
+	FuncAddr(GradientFill);
+	FuncAddr(TransparentBlt);
+	FuncAddr(vSetDdrawflag);
 }
 
 void LoadDLL(fs::path selfName)
@@ -707,5 +714,13 @@ void LoadDLL(fs::path selfName)
 		GetAddr(VerLanguageNameW);
 		GetAddr(VerQueryValueA);
 		GetAddr(VerQueryValueW);
+	}
+	else if (iequals(selfName.native(), L"msimg32.dll"))
+	{
+		GetAddr(AlphaBlend);
+		GetAddr(DllInitialize);
+		GetAddr(GradientFill);
+		GetAddr(TransparentBlt);
+		GetAddr(vSetDdrawflag);
 	}
 }
