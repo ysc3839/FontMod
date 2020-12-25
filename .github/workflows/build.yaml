@@ -12,7 +12,7 @@ jobs:
       with:
         submodules: true
     - name: Add msbuild to PATH
-      uses: microsoft/setup-msbuild@v1.0.0
+      uses: microsoft/setup-msbuild@v1.0.2
     - run: |
         mkdir build64
         mkdir build32
