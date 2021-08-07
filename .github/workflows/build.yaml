@@ -9,37 +9,67 @@ jobs:
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v2
-      with:
-        submodules: true
     - name: Add msbuild to PATH
-      uses: microsoft/setup-msbuild@v1.0.2
+      uses: microsoft/setup-msbuild@v1
     - run: |
-        mkdir build64
-        mkdir build32
-        Start-Job -Init ([ScriptBlock]::Create("Set-Location '$pwd\build64'")) -Script {
-          cmake -G "Visual Studio 16 2019" ..
-          msbuild FontMod.sln "-p:Configuration=Release" }
-        Start-Job -Init ([ScriptBlock]::Create("Set-Location '$pwd\build32'")) -Script {
-          cmake -G "Visual Studio 16 2019" -A Win32 ..
-          msbuild FontMod.sln "-p:Configuration=Release" }
+        cd .github
+        cp remove-file-location.patch /c/vcpkg
+        cp update-detours.patch /c/vcpkg
+        cd /c/vcpkg
+        git pull
+        git apply remove-file-location.patch
+        git apply update-detours.patch
+      shell: bash
+    - run: |
+        vcpkg install ryml[core] detours wil --triplet=arm64-windows-static
+        vcpkg install ryml[core] detours wil --triplet=arm-windows-static
+        vcpkg install ryml[core] detours wil --triplet=x64-windows-static
+        vcpkg install ryml[core] detours wil --triplet=x86-windows-static
+        vcpkg integrate install
+      shell: cmd
+    - run: |
+        Start-Job -Init ([ScriptBlock]::Create("Set-Location '$pwd'")) -Script {
+          msbuild FontMod.sln "-p:Configuration=Release;Platform=x64" }
+        Start-Job -Init ([ScriptBlock]::Create("Set-Location '$pwd'")) -Script {
+          msbuild FontMod.sln "-p:Configuration=Release;Platform=x86" }
+        Start-Job -Init ([ScriptBlock]::Create("Set-Location '$pwd'")) -Script {
+          msbuild FontMod.sln "-p:Configuration=Release;Platform=ARM64" }
+        Start-Job -Init ([ScriptBlock]::Create("Set-Location '$pwd'")) -Script {
+          msbuild FontMod.sln "-p:Configuration=Release;Platform=ARM" }
         Get-Job | Wait-Job | Receive-Job
       shell: powershell
     - uses: actions/upload-artifact@v2
       with:
         name: FontMod64
-        path: build64/x64/Release/FontMod64.dll
+        path: x64/Release/FontMod64.dll
     - uses: actions/upload-artifact@v2
       with:
         name: FontMod64
-        path: build64/x64/Release/FontMod64.pdb
+        path: x64/Release/FontMod64.pdb
     - uses: actions/upload-artifact@v2
       with:
         name: FontMod32
-        path: build32/Release/FontMod32.dll
+        path: Release/FontMod32.dll
     - uses: actions/upload-artifact@v2
       with:
         name: FontMod32
-        path: build32/Release/FontMod32.pdb
+        path: Release/FontMod32.pdb
+    - uses: actions/upload-artifact@v2
+      with:
+        name: FontModARM64
+        path: ARM64/Release/FontModARM64.dll
+    - uses: actions/upload-artifact@v2
+      with:
+        name: FontModARM64
+        path: ARM64/Release/FontModARM64.pdb
+    - uses: actions/upload-artifact@v2
+      with:
+        name: FontModARM
+        path: ARM/Release/FontModARM.dll
+    - uses: actions/upload-artifact@v2
+      with:
+        name: FontModARM
+        path: ARM/Release/FontModARM.pdb
     - name: Create Release
       id: create_release
       uses: actions/create-release@v1
@@ -56,7 +86,7 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: build64/x64/Release/FontMod64.dll
+        asset_path: x64/Release/FontMod64.dll
         asset_name: FontMod64.dll
         asset_content_type: application/octet-stream
     - name: Upload Release Asset
@@ -65,6 +95,24 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: build32/Release/FontMod32.dll
+        asset_path: Release/FontMod32.dll
         asset_name: FontMod32.dll
+        asset_content_type: application/octet-stream
+    - name: Upload Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ARM64/Release/FontModARM64.dll
+        asset_name: FontModARM64.dll
+        asset_content_type: application/octet-stream
+    - name: Upload Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ARM/Release/FontModARM.dll
+        asset_name: FontModARM.dll
         asset_content_type: application/octet-stream

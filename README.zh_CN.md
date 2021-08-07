@@ -1,12 +1,12 @@
 # FontMod
 [English](README.md) **简体中文** [繁体中文](README.zh_TW.md)
 
-修改 Win32 程序字体的简单的 hook 工具。可用于一些基于 GDI 或者 Qt 的程序。
+修改 Win32 程序字体的简单的 hook 工具。可用于一些基于 GDI/GDI+ 或者 Qt 的程序。
 
 > 经测试可用于 [Telegram Desktop](https://desktop.telegram.org/)、[Kleopatra (Gpg4Win)](https://www.gpg4win.org/) 和 [Mendeley Desktop](https://www.mendeley.com/download-desktop/)。
 
 # 使用方法
-[下载](https://github.com/ysc3839/FontMod/releases) `FontMod{32,64}.dll` 并重命名为下列之一：  
+[下载](https://github.com/ysc3839/FontMod/releases) `FontMod{32,64,ARM,ARM64}.dll` 并重命名为下列之一：  
 `dinput8.dll`, `dinput.dll`, `dsound.dll`, `d3d9.dll`, `d3d11.dll`, `ddraw.dll`, `winmm.dll`, `version.dll`, `d3d8.dll` (`d3d8.dll` 仅支持 32 位)。  
 然后放在程序 exe 所在的文件夹里。  
 用户字体：把字体文件放在 `fonts` 文件夹内，可以直接使用，无需安装到系统中。
@@ -42,8 +42,23 @@ fonts:
     replace: 맑은 고딕
     <<: *style
 
-fixGSOFont: true # true is to use system UI font
+#fixGSOFont: true # true is to use system UI font
 #fixGSOFont: *zh-cn-font # Or replace with user defined font
+
+#gdiplus:
+#  SimSun:
+#    replace: Microsoft YaHei
+#  Microsoft YaHei:
+#    size: 72.0
+#    style: regular
+##    style: 0
+#    unit: point
+##    unit: 3
+
+#gdipGFFSansSerif: Calibri
+#gdipGFFSerif: Times New Roman
+#gdipGFFMonospace: Consolas
+
 debug: false
 ```
 * fonts
@@ -53,6 +68,17 @@ debug: false
 
 * fixGSOFont
 替换 [GetStockObject](https://docs.microsoft.com/en-us/windows/desktop/api/winuser/nf-winuser-getsyscolorbrush) 字体，选项与前面的 `fonts` 相同。若设为 `true` 则会使用 [SystemParametersInfo](https://docs.microsoft.com/en-us/windows/desktop/api/winuser/nf-winuser-systemparametersinfow#spi_getnonclientmetrics) 获取系统字体。
+
+* gdiplus
+替换 GDI+ 字体. 由于 GDI+ 的限制, 你只可以把一个字体替换成另一个 (`SimSun` -> `Microsoft YaHei`)，或者修改某个字体的样式。
+  * `key ("SimSun")`: 要修改的字体名称。
+  * `replace` / `name`: 要替换成的字体名称。
+  * `size`: 字体大小。
+  * `style`: 字体样式。允许的值为: `regular` `bold` `italic` `boldItalic` `underline` `strikeout`。或者你可以直接写 [FontStyle enumeration](https://docs.microsoft.com/en-us/windows/win32/api/gdiplusenums/ne-gdiplusenums-fontstyle) 对应的整数值。
+  * `unit`: 大小的单位。允许的值为: `world` `display` `pixel` `point` `inch` `document` `millimeter`. 或者你可以直接写 [Unit enumeration](https://docs.microsoft.com/en-us/windows/win32/api/gdiplusenums/ne-gdiplusenums-unit) 对应的整数值。
+
+* gdipGFFSansSerif, gdipGFFSerif, gdipGFFMonospace
+替换 GDI+ generic font family. (https://docs.microsoft.com/en-us/windows/win32/gdiplus/-gdiplus-fontfamily-flat)
 
 * debug
 调试模式 (会记录相关信息到 FontMod.log)。

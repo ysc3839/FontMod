@@ -1,6 +1,0 @@
-[submodule "yaml-cpp"]
-	path = yaml-cpp
-	url = https://github.com/jbeder/yaml-cpp.git
-[submodule "Detours"]
-	path = Detours
-	url = https://github.com/microsoft/Detours.git

@@ -26,6 +26,21 @@ fonts:
     replace: 맑은 고딕
     <<: *style
 
-fixGSOFont: true # true is to use system UI font
+#fixGSOFont: true # true is to use system UI font
 #fixGSOFont: *zh-cn-font # Or replace with user defined font
+
+#gdiplus:
+#  SimSun:
+#    replace: Microsoft YaHei
+#  Microsoft YaHei:
+#    size: 72.0
+#    style: regular
+##    style: 0
+#    unit: point
+##    unit: 3
+
+#gdipGFFSansSerif: Calibri
+#gdipGFFSerif: Times New Roman
+#gdipGFFMonospace: Consolas
+
 debug: false

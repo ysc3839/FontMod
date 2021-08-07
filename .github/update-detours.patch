@@ -1,0 +1,62 @@
+From c69446e06fce24a8eb91beba5694d01d38da6f3e Mon Sep 17 00:00:00 2001
+From: Richard Yu <yurichard3839@gmail.com>
+Date: Mon, 9 Aug 2021 00:12:55 +0800
+Subject: [PATCH] Update detours
+
+---
+ ports/detours/find-jmp-bounds-arm64.patch | 24 -----------------------
+ ports/detours/portfile.cmake              |  6 ++----
+ 2 files changed, 2 insertions(+), 28 deletions(-)
+ delete mode 100644 ports/detours/find-jmp-bounds-arm64.patch
+
+diff --git a/ports/detours/find-jmp-bounds-arm64.patch b/ports/detours/find-jmp-bounds-arm64.patch
+deleted file mode 100644
+index 21390cec0..000000000
+--- a/ports/detours/find-jmp-bounds-arm64.patch
++++ /dev/null
+@@ -1,24 +0,0 @@
+-diff --git a/src/detours.cpp b/src/detours.cpp
+-index 8345c4d..3cd0e9d 100644
+---- a/src/detours.cpp
+-+++ b/src/detours.cpp
+-@@ -974,6 +974,19 @@ inline PBYTE detour_skip_jmp(PBYTE pbCode, PVOID *ppGlobals)
+-     return pbCode;
+- }
+- 
+-+inline void detour_find_jmp_bounds(PBYTE pbCode,
+-+                                   PDETOUR_TRAMPOLINE *ppLower,
+-+                                   PDETOUR_TRAMPOLINE *ppUpper)
+-+{
+-+    // We have to place trampolines within +/- 2GB of code.
+-+    ULONG_PTR lo = detour_2gb_below((ULONG_PTR)pbCode);
+-+    ULONG_PTR hi = detour_2gb_above((ULONG_PTR)pbCode);
+-+    DETOUR_TRACE(("[%p..%p..%p]\n", lo, pbCode, hi));
+-+
+-+    *ppLower = (PDETOUR_TRAMPOLINE)lo;
+-+    *ppUpper = (PDETOUR_TRAMPOLINE)hi;
+-+}
+-+
+- inline BOOL detour_does_code_end_function(PBYTE pbCode)
+- {
+-     ULONG Opcode = fetch_opcode(pbCode);
+diff --git a/ports/detours/portfile.cmake b/ports/detours/portfile.cmake
+index 9b57b1326..b14a19f87 100644
+--- a/ports/detours/portfile.cmake
++++ b/ports/detours/portfile.cmake
+@@ -3,11 +3,9 @@ vcpkg_check_linkage(ONLY_STATIC_LIBRARY)
+ vcpkg_from_github(
+     OUT_SOURCE_PATH SOURCE_PATH
+     REPO microsoft/Detours
+-    REF v4.0.1
+-    SHA512 0a9c21b8222329add2de190d2e94d99195dfa55de5a914b75d380ffe0fb787b12e016d0723ca821001af0168fd1643ffd2455298bf3de5fdc155b3393a3ccc87
++    REF 84d4356acba9b7a0e214c1b1580ff957a18137c9
++    SHA512 838044dd59eba0644a94a7a5e3f9e40fba9b28d13ac26f4ddf049dddcb17aa48ccdb3c028fc3c3653fac872d93059429d8e80d6020d0eb5048c36524fdafa1c8
+     HEAD_REF master
+-    PATCHES 
+-        find-jmp-bounds-arm64.patch
+ )
+ 
+ vcpkg_build_nmake(
+-- 
+2.32.0.windows.2
+

@@ -36,9 +36,9 @@ extern "C"
 	//DllGetClassObject
 	FuncAddr(GetDeviceID);
 
-	// d3d8 x86 only
+	// d3d8 32bit only
 #ifdef WIN32
-//DebugSetMute
+	//DebugSetMute
 	FuncAddr(Direct3D8EnableMaximizedWindowedModeShim);
 	FuncAddr(Direct3DCreate8);
 	FuncAddr(ValidatePixelShader);

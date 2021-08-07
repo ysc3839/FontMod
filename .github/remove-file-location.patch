@@ -1,0 +1,109 @@
+From 25e6e84fdc89f56af0bf32947bf235ea58fb3bad Mon Sep 17 00:00:00 2001
+From: Richard Yu <yurichard3839@gmail.com>
+Date: Mon, 2 Aug 2021 03:40:03 +0800
+Subject: [PATCH] Remove file location
+
+---
+ ports/c4core/portfile.cmake        |  1 +
+ ports/c4core/remove-file-loc.patch | 13 +++++++++
+ ports/ryml/portfile.cmake          |  2 +-
+ ports/ryml/remove-file-loc.patch   | 42 ++++++++++++++++++++++++++++++
+ 4 files changed, 57 insertions(+), 1 deletion(-)
+ create mode 100644 ports/c4core/remove-file-loc.patch
+ create mode 100644 ports/ryml/remove-file-loc.patch
+
+diff --git a/ports/c4core/portfile.cmake b/ports/c4core/portfile.cmake
+index 0e4ff81c2..a798a3ed3 100644
+--- a/ports/c4core/portfile.cmake
++++ b/ports/c4core/portfile.cmake
+@@ -11,6 +11,7 @@ vcpkg_from_github(
+     REF 636f507c33f0c79dce491aec066455ff384d49dc
+     SHA512 3282876be5883b047e8d25ee392f62d2e9ae79af8fdd65c11b1e36d2fdb0648230fe6c7fb57472a4cbced166979351f12494215aa664977a113b74c26bb6f19b
+     HEAD_REF master
++    PATCHES remove-file-loc.patch
+ )
+ 
+ set(CM_COMMIT_HASH fe41e86552046c3df9ba73a40bf3d755df028c1e)
+diff --git a/ports/c4core/remove-file-loc.patch b/ports/c4core/remove-file-loc.patch
+new file mode 100644
+index 000000000..4bf50d29d
+--- /dev/null
++++ b/ports/c4core/remove-file-loc.patch
+@@ -0,0 +1,13 @@
++diff --git a/src/c4/config.hpp b/src/c4/config.hpp
++index bda8033..a5a377e 100644
++--- a/src/c4/config.hpp
+++++ b/src/c4/config.hpp
++@@ -10,7 +10,7 @@
++ 
++ //#define C4_DEBUG
++ 
++-#define C4_ERROR_SHOWS_FILELINE
+++//#define C4_ERROR_SHOWS_FILELINE
++ //#define C4_ERROR_SHOWS_FUNC
++ //#define C4_ERROR_THROWS_EXCEPTION
++ //#define C4_NO_ALLOC_DEFAULTS
+diff --git a/ports/ryml/portfile.cmake b/ports/ryml/portfile.cmake
+index f3e2bf5c2..d1845d5b5 100644
+--- a/ports/ryml/portfile.cmake
++++ b/ports/ryml/portfile.cmake
+@@ -11,7 +11,7 @@ vcpkg_from_github(
+     REF affafd5db67208eb85413327595507314c068525
+     SHA512 31d827ead680828b3c0ad879290b17d4729d412e30a20459aea4b92a8f4f3b8397f82b09c27d918ab4b955289560b17697d5f15eaa4d24661ff46f5dbbc50fa8
+     HEAD_REF master
+-    PATCHES cmake-fix.patch
++    PATCHES cmake-fix.patch remove-file-loc.patch
+ )
+ 
+ set(CM_COMMIT_HASH fe41e86552046c3df9ba73a40bf3d755df028c1e)
+diff --git a/ports/ryml/remove-file-loc.patch b/ports/ryml/remove-file-loc.patch
+new file mode 100644
+index 000000000..1b0a68be9
+--- /dev/null
++++ b/ports/ryml/remove-file-loc.patch
+@@ -0,0 +1,42 @@
++diff --git a/src/c4/yml/common.hpp b/src/c4/yml/common.hpp
++index 2c16046..b99ea2d 100644
++--- a/src/c4/yml/common.hpp
+++++ b/src/c4/yml/common.hpp
++@@ -28,7 +28,7 @@
++         if(!(cond))                                                     \
++         {                                                               \
++             C4_DEBUG_BREAK();                                           \
++-            c4::yml::error("check failed: " #cond, c4::yml::Location(__FILE__, __LINE__, 0)); \
+++            c4::yml::error("check failed: " #cond);                     \
++         }                                                               \
++     } while(0)
++ 
++@@ -38,7 +38,7 @@
++         if(!(cond))                                                     \
++         {                                                               \
++             C4_DEBUG_BREAK();                                           \
++-            c4::yml::error(msg ": check failed: " #cond, c4::yml::Location(__FILE__, __LINE__, 0)); \
+++            c4::yml::error(msg ": check failed: " #cond);               \
++         }                                                               \
++     } while(0)
++ 
++diff --git a/src/c4/yml/detail/parser_dbg.hpp b/src/c4/yml/detail/parser_dbg.hpp
++index cef1379..d6573c1 100644
++--- a/src/c4/yml/detail/parser_dbg.hpp
+++++ b/src/c4/yml/detail/parser_dbg.hpp
++@@ -29,11 +29,11 @@
++ 
++ #define _c4err(fmt, ...)   \
++     do { if(c4::is_debugger_attached()) { C4_DEBUG_BREAK(); } \
++-         this->_err("\n" "%s:%d: ERROR parsing yml: " fmt     , __FILE__, __LINE__, ## __VA_ARGS__); } while(0)
+++         this->_err("ERROR parsing yml: " fmt     , ## __VA_ARGS__); } while(0)
++ #ifdef RYML_DBG
++-#   define _c4dbgt(fmt, ...)   this->_dbg("%s:%d: "   fmt     , __FILE__, __LINE__, ## __VA_ARGS__)
++-#   define _c4dbgpf(fmt, ...)   printf   ("%s:%d: "   fmt "\n", __FILE__, __LINE__, ## __VA_ARGS__)
++-#   define _c4dbgp(msg)         printf   ("%s:%d: "   msg "\n", __FILE__, __LINE__                )
+++#   define _c4dbgt(fmt, ...)   this->_dbg(fmt     , ## __VA_ARGS__)
+++#   define _c4dbgpf(fmt, ...)   printf   (fmt "\n", ## __VA_ARGS__)
+++#   define _c4dbgp(msg)         printf   (msg "\n",               )
++ #   define _c4dbgq(msg)         printf(msg "\n")
++ #else
++ #   define _c4dbgt(fmt, ...)
+-- 
+2.32.0.windows.2
+

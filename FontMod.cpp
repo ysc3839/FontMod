@@ -1,45 +1,51 @@
-﻿#define WIN32_LEAN_AND_MEAN
-#define NOMINMAX
-#include <windows.h>
-#include <cstdint>
-#include <unordered_map>
-#include <string>
-#include <string_view>
-#include <fstream>
-#include <filesystem>
+#include "pch.h"
 namespace fs = std::filesystem;
-
-#include "yaml-cpp/yaml.h"
-#include "detours.h"
-
 #include "Util.hpp"
-#include "dllstub.hpp"
+#include "DllStub.hpp"
 #include "DefConfigFile.hpp"
+#include "RymlCallbacks.hpp"
 
-#define CONFIG_FILE L"FontMod.yaml"
-#define LOG_FILE L"FontMod.log"
+#define CONFIG_FILE_STR L"FontMod.yaml"
+constexpr std::wstring_view CONFIG_FILE = CONFIG_FILE_STR;
+constexpr std::wstring_view LOG_FILE = L"FontMod.log";
 
 auto addrCreateFontIndirectExW = CreateFontIndirectExW;
 auto addrGetStockObject = GetStockObject;
 
-// overrideflags
-#define	_NONE 0
-#define	_HEIGHT 1 << 1
-#define	_WIDTH 1 << 2
-#define	_WEIGHT 1 << 3
-#define	_ITALIC 1 << 4
-#define	_UNDERLINE 1 << 5
-#define	_STRIKEOUT 1 << 6
-#define	_CHARSET 1 << 7
-#define	_OUTPRECISION 1 << 8
-#define	_CLIPPRECISION 1 << 9
-#define	_QUALITY 1 << 10
-#define	_PITCHANDFAMILY 1 << 11
+namespace GPFlat = Gdiplus::DllExports;
+using GPFlat::GdipCreateFontFamilyFromName;
+decltype(GdipCreateFontFamilyFromName)* addrGdipCreateFontFamilyFromName = nullptr;
+using GPFlat::GdipCreateFont;
+decltype(GdipCreateFont)* addrGdipCreateFont = nullptr;
+using GPFlat::GdipGetFamilyName;
+decltype(GdipGetFamilyName)* addrGdipGetFamilyName = nullptr;
+using GPFlat::GdipGetGenericFontFamilySansSerif;
+decltype(GdipGetGenericFontFamilySansSerif)* addrGdipGetGenericFontFamilySansSerif = nullptr;
+using GPFlat::GdipGetGenericFontFamilySerif;
+decltype(GdipGetGenericFontFamilySerif)* addrGdipGetGenericFontFamilySerif = nullptr;
+using GPFlat::GdipGetGenericFontFamilyMonospace;
+decltype(GdipGetGenericFontFamilyMonospace)* addrGdipGetGenericFontFamilyMonospace = nullptr;
 
-struct font
+struct FontInfo
 {
-	std::wstring replace;
-	uint32_t overrideFlags;
+	enum struct OverrideFlags : uint32_t
+	{
+		None = 0,
+		Height = 1 << 1,
+		Width = 1 << 2,
+		Weight = 1 << 3,
+		Italic = 1 << 4,
+		Underline = 1 << 5,
+		StrikeOut = 1 << 6,
+		Charset = 1 << 7,
+		OutPrecision = 1 << 8,
+		ClipPrecision = 1 << 9,
+		Quality = 1 << 10,
+		PitchAndFamily = 1 << 11
+	};
+
+	std::wstring name;
+	OverrideFlags overrideFlags = OverrideFlags::None;
 	long height;
 	long width;
 	long weight;
@@ -53,15 +59,94 @@ struct font
 	BYTE pitchAndFamily;
 };
 
-enum GSOFontMode {
-	DISABLED,
-	USE_NCM_FONT, // Use default font from SystemParametersInfo SPI_GETNONCLIENTMETRICS
-	USE_USER_FONT // Use user defined font
+DEFINE_ENUM_FLAG_OPERATORS(FontInfo::OverrideFlags);
+
+enum struct GSOFontMode
+{
+	Disabled,
+	UseNCMFont, // Use default font from SystemParametersInfo SPI_GETNONCLIENTMETRICS
+	UseUserFont // Use user defined font
 };
 
-std::unordered_map<std::wstring, font> fontsMap;
-FILE *logFile = nullptr;
+struct GPFontInfo
+{
+	enum struct OverrideFlags : uint32_t
+	{
+		None = 0,
+		Size = 1 << 1,
+		Style = 1 << 2,
+		Unit = 1 << 3
+	};
+
+	enum struct Style
+	{
+		Regular,
+		Bold,
+		Italic,
+		BoldItalic,
+		Underline,
+		Strikeout
+	};
+
+	enum struct Unit
+	{
+		World,
+		Display,
+		Pixel,
+		Point,
+		Inch,
+		Document,
+		Millimeter
+	};
+
+	OverrideFlags overrideFlags = OverrideFlags::None;
+	float size;
+	Style style;
+	Unit unit;
+};
+
+DEFINE_ENUM_FLAG_OPERATORS(GPFontInfo::OverrideFlags);
+
+std::unordered_map<std::wstring, FontInfo> fontsMap;
+wil::unique_hfile logFile;
 HFONT newGSOFont = nullptr;
+
+std::unordered_map<std::wstring, std::wstring> gdipFontFamiliesMap;
+std::unordered_map<std::wstring, GPFontInfo> gdipFontsMap;
+
+std::wstring gdipGFFSansSerif;
+std::wstring gdipGFFSerif;
+std::wstring gdipGFFMonospace;
+
+void OverrideLogFont(const FontInfo& info, LOGFONTW& lf)
+{
+	using OF = FontInfo::OverrideFlags;
+
+	if (!info.name.empty())
+		info.name.copy(lf.lfFaceName, LF_FACESIZE);
+	if ((info.overrideFlags & OF::Height) == OF::Height)
+		lf.lfHeight = info.height;
+	if ((info.overrideFlags & OF::Width) == OF::Width)
+		lf.lfWidth = info.width;
+	if ((info.overrideFlags & OF::Weight) == OF::Weight)
+		lf.lfWeight = info.weight;
+	if ((info.overrideFlags & OF::Italic) == OF::Italic)
+		lf.lfItalic = info.italic;
+	if ((info.overrideFlags & OF::Underline) == OF::Underline)
+		lf.lfUnderline = info.underLine;
+	if ((info.overrideFlags & OF::StrikeOut) == OF::StrikeOut)
+		lf.lfStrikeOut = info.strikeOut;
+	if ((info.overrideFlags & OF::Charset) == OF::Charset)
+		lf.lfCharSet = info.charSet;
+	if ((info.overrideFlags & OF::OutPrecision) == OF::OutPrecision)
+		lf.lfOutPrecision = info.outPrecision;
+	if ((info.overrideFlags & OF::ClipPrecision) == OF::ClipPrecision)
+		lf.lfClipPrecision = info.clipPrecision;
+	if ((info.overrideFlags & OF::Quality) == OF::Quality)
+		lf.lfQuality = info.quality;
+	if ((info.overrideFlags & OF::PitchAndFamily) == OF::PitchAndFamily)
+		lf.lfPitchAndFamily = info.pitchAndFamily;
+}
 
 HFONT WINAPI MyCreateFontIndirectExW(const ENUMLOGFONTEXDVW* lpelf)
 {
@@ -72,20 +157,19 @@ HFONT WINAPI MyCreateFontIndirectExW(const ENUMLOGFONTEXDVW* lpelf)
 		std::string name;
 		if (Utf16ToUtf8(lplf->lfFaceName, name))
 		{
-#define bool_string(b) b != FALSE ? "true" : "false"
-			fprintf_s(logFile,
-				"[CreateFont] name = \"%s\", height = %d, "
-				"width = %d, escapement = %d, "
-				"orientation = %d, weight = %d, "
-				"italic = %s, underline = %s, "
-				"strikeout = %s, charset = %d, "
-				"outprecision = %d, clipprecision = %d, "
-				"quality = %d, pitchandfamily = %d\n",
-				name.c_str(), lplf->lfHeight,
+			FormatToFile(logFile.get(),
+				"[CreateFont] name = \"{}\", height = {}, "
+				"width = {}, escapement = {}, "
+				"orientation = {}, weight = {}, "
+				"italic = {}, underline = {}, "
+				"strikeout = {}, charset = {}, "
+				"outprecision = {}, clipprecision = {}, "
+				"quality = {}, pitchandfamily = {}\n",
+				name, lplf->lfHeight,
 				lplf->lfWidth, lplf->lfEscapement,
 				lplf->lfOrientation, lplf->lfWeight,
-				bool_string(lplf->lfItalic), bool_string(lplf->lfUnderline),
-				bool_string(lplf->lfStrikeOut), lplf->lfCharSet,
+				!!lplf->lfItalic, !!lplf->lfUnderline,
+				!!lplf->lfStrikeOut, lplf->lfCharSet,
 				lplf->lfOutPrecision, lplf->lfClipPrecision,
 				lplf->lfQuality, lplf->lfPitchAndFamily);
 		}
@@ -99,31 +183,7 @@ HFONT WINAPI MyCreateFontIndirectExW(const ENUMLOGFONTEXDVW* lpelf)
 		elf = *lpelf;
 		LOGFONTW& lf = elf.elfEnumLogfontEx.elfLogFont;
 
-		size_t len = it->second.replace._Copy_s(lf.lfFaceName, LF_FACESIZE, LF_FACESIZE);
-		lf.lfFaceName[len] = L'\0';
-
-		if ((it->second.overrideFlags & _HEIGHT) == _HEIGHT)
-			lf.lfHeight = it->second.height;
-		if ((it->second.overrideFlags & _WIDTH) == _WIDTH)
-			lf.lfWidth = it->second.width;
-		if ((it->second.overrideFlags & _WEIGHT) == _WEIGHT)
-			lf.lfWeight = it->second.weight;
-		if ((it->second.overrideFlags & _ITALIC) == _ITALIC)
-			lf.lfItalic = it->second.italic;
-		if ((it->second.overrideFlags & _UNDERLINE) == _UNDERLINE)
-			lf.lfUnderline = it->second.underLine;
-		if ((it->second.overrideFlags & _STRIKEOUT) == _STRIKEOUT)
-			lf.lfStrikeOut = it->second.strikeOut;
-		if ((it->second.overrideFlags & _CHARSET) == _CHARSET)
-			lf.lfCharSet = it->second.charSet;
-		if ((it->second.overrideFlags & _OUTPRECISION) == _OUTPRECISION)
-			lf.lfOutPrecision = it->second.outPrecision;
-		if ((it->second.overrideFlags & _CLIPPRECISION) == _CLIPPRECISION)
-			lf.lfClipPrecision = it->second.clipPrecision;
-		if ((it->second.overrideFlags & _QUALITY) == _QUALITY)
-			lf.lfQuality = it->second.quality;
-		if ((it->second.overrideFlags & _PITCHANDFAMILY) == _PITCHANDFAMILY)
-			lf.lfPitchAndFamily = it->second.pitchAndFamily;
+		OverrideLogFont(it->second, lf);
 
 		lpelf = &elf;
 	}
@@ -145,253 +205,344 @@ HGDIOBJ WINAPI MyGetStockObject(int i)
 	return addrGetStockObject(i);
 }
 
-bool LoadSettings(HMODULE hModule, const fs::path& fileName, wchar_t* errMsg, GSOFontMode& fixGSOFont, LOGFONT& userGSOFont, bool& debug)
+using Gdiplus::GpStatus;
+using Gdiplus::GpFontCollection;
+using Gdiplus::GpFontFamily;
+using Gdiplus::REAL;
+using Gdiplus::Unit;
+using Gdiplus::GpFont;
+
+GpStatus WINGDIPAPI MyGdipCreateFontFamilyFromName(GDIPCONST WCHAR* name, GpFontCollection* fontCollection, GpFontFamily** fontFamily)
 {
-	bool ret = false;
-	std::ifstream fin(fileName);
-	if (fin)
+	if (logFile)
 	{
-		do {
-			YAML::Node config;
-			try
-			{
-				config = YAML::Load(fin);
-			}
-			catch (const std::exception& e)
-			{
-				swprintf(errMsg, 512, L"YAML::Load error.\n%hs", e.what());
-				break;
-			}
-
-			if (!config.IsMap())
-			{
-				swprintf(errMsg, 512, L"Root node is not a map.");
-				break;
-			}
-
-			if (auto node = FindNode(config, "fonts"); node && node.IsMap())
-			{
-				for (const auto& i : node)
-				{
-					if (i.first.IsScalar() && i.second.IsMap())
-					{
-						YAML::Node replace;
-						if (auto r = FindNode(i.second, "replace"); r && r.IsScalar())
-						{
-							replace = r;
-						}
-						else
-						{
-							replace = FindNode(i.second, "name");
-						}
-						if (replace && replace.IsScalar())
-						{
-							font fontInfo;
-							Utf8ToUtf16(replace.as<std::string>(), fontInfo.replace);
-							fontInfo.overrideFlags = _NONE;
-
-							if (auto node = FindNode(i.second, "size"); node && node.IsScalar())
-							{
-								if (stol(node.as<std::string>(), fontInfo.height))
-									fontInfo.overrideFlags |= _HEIGHT;
-							}
-
-							if (auto node = FindNode(i.second, "width"); node && node.IsScalar())
-							{
-								if (stol(node.as<std::string>(), fontInfo.width))
-									fontInfo.overrideFlags |= _WIDTH;
-							}
-
-							if (auto node = FindNode(i.second, "weight"); node && node.IsScalar())
-							{
-								if (stol(node.as<std::string>(), fontInfo.weight))
-									fontInfo.overrideFlags |= _WEIGHT;
-							}
-
-							if (auto node = FindNode(i.second, "italic"); node && node.IsScalar())
-							{
-								fontInfo.overrideFlags |= _ITALIC;
-								fontInfo.italic = node.as<bool>();
-							}
-
-							if (auto node = FindNode(i.second, "underLine"); node && node.IsScalar())
-							{
-								fontInfo.overrideFlags |= _UNDERLINE;
-								fontInfo.underLine = node.as<bool>();
-							}
-
-							if (auto node = FindNode(i.second, "strikeOut"); node && node.IsScalar())
-							{
-								fontInfo.overrideFlags |= _STRIKEOUT;
-								fontInfo.strikeOut = node.as<bool>();
-							}
-
-							if (auto node = FindNode(i.second, "charSet"); node && node.IsScalar())
-							{
-								unsigned long out;
-								if (stoul(node.as<std::string>(), out))
-								{
-									fontInfo.overrideFlags |= _CHARSET;
-									fontInfo.charSet = static_cast<BYTE>(out);
-								}
-							}
-
-							if (auto node = FindNode(i.second, "outPrecision"); node && node.IsScalar())
-							{
-								unsigned long out;
-								if (stoul(node.as<std::string>(), out))
-								{
-									fontInfo.overrideFlags |= _OUTPRECISION;
-									fontInfo.outPrecision = static_cast<BYTE>(out);
-								}
-							}
-
-							if (auto node = FindNode(i.second, "clipPrecision"); node && node.IsScalar())
-							{
-								unsigned long out;
-								if (stoul(node.as<std::string>(), out))
-								{
-									fontInfo.overrideFlags |= _CLIPPRECISION;
-									fontInfo.clipPrecision = static_cast<BYTE>(out);
-								}
-							}
-
-							if (auto node = FindNode(i.second, "quality"); node && node.IsScalar())
-							{
-								unsigned long out;
-								if (stoul(node.as<std::string>(), out))
-								{
-									fontInfo.overrideFlags |= _QUALITY;
-									fontInfo.quality = static_cast<BYTE>(out);
-								}
-							}
-
-							if (auto node = FindNode(i.second, "pitchAndFamily"); node && node.IsScalar())
-							{
-								unsigned long out;
-								if (stoul(node.as<std::string>(), out))
-								{
-									fontInfo.overrideFlags |= _PITCHANDFAMILY;
-									fontInfo.pitchAndFamily = static_cast<BYTE>(out);
-								}
-							}
-
-							std::wstring find;
-							Utf8ToUtf16(i.first.as<std::string>(), find);
-							fontsMap[find] = fontInfo;
-						}
-					}
-				}
-			}
-
-			if (auto node = FindNode(config, "fixGSOFont"); node)
-			{
-				if (node.IsScalar())
-				{
-					if (node.as<bool>())
-						fixGSOFont = USE_NCM_FONT;
-				}
-				else if (node.IsMap())
-				{
-					YAML::Node name;
-					if (auto r = FindNode(node, "replace"); r && r.IsScalar())
-					{
-						name = r;
-					}
-					else
-					{
-						name = FindNode(node, "name");
-					}
-					if (name && name.IsScalar())
-					{
-						fixGSOFont = USE_USER_FONT;
-
-						std::wstring faceName;
-						Utf8ToUtf16(name.as<std::string>(), faceName);
-						memcpy_s(userGSOFont.lfFaceName, sizeof(userGSOFont.lfFaceName), faceName.c_str(), faceName.size() * sizeof(decltype(faceName)::value_type));
-
-						if (auto n = FindNode(node, "size"); n && n.IsScalar())
-						{
-							stol(n.as<std::string>(), userGSOFont.lfHeight);
-						}
-
-						if (auto n = FindNode(node, "width"); n && n.IsScalar())
-						{
-							stol(n.as<std::string>(), userGSOFont.lfWidth);
-						}
-
-						if (auto n = FindNode(node, "weight"); n && n.IsScalar())
-						{
-							stol(n.as<std::string>(), userGSOFont.lfWeight);
-						}
-
-						if (auto n = FindNode(node, "italic"); n && n.IsScalar())
-						{
-							userGSOFont.lfItalic = n.as<bool>();
-						}
-
-						if (auto n = FindNode(node, "underLine"); n && n.IsScalar())
-						{
-							userGSOFont.lfUnderline = n.as<bool>();
-						}
-
-						if (auto n = FindNode(node, "strikeOut"); n && n.IsScalar())
-						{
-							userGSOFont.lfStrikeOut = n.as<bool>();
-						}
-
-						if (auto n = FindNode(node, "charSet"); n && n.IsScalar())
-						{
-							unsigned long out;
-							stoul(n.as<std::string>(), out);
-							userGSOFont.lfCharSet = static_cast<BYTE>(out);
-						}
-
-						if (auto n = FindNode(node, "outPrecision"); n && n.IsScalar())
-						{
-							unsigned long out;
-							stoul(n.as<std::string>(), out);
-							userGSOFont.lfOutPrecision = static_cast<BYTE>(out);
-						}
-
-						if (auto n = FindNode(node, "clipPrecision"); n && n.IsScalar())
-						{
-							unsigned long out;
-							stoul(n.as<std::string>(), out);
-							userGSOFont.lfClipPrecision = static_cast<BYTE>(out);
-						}
-
-						if (auto n = FindNode(node, "quality"); n && n.IsScalar())
-						{
-							unsigned long out;
-							stoul(n.as<std::string>(), out);
-							userGSOFont.lfQuality = static_cast<BYTE>(out);
-						}
-
-						if (auto n = FindNode(node, "pitchAndFamily"); n && n.IsScalar())
-						{
-							unsigned long out;
-							stoul(n.as<std::string>(), out);
-							userGSOFont.lfPitchAndFamily = static_cast<BYTE>(out);
-						}
-					}
-				}
-			}
-
-			if (auto node = FindNode(config, "debug"); node && node.IsScalar())
-				debug = node.as<bool>();
-
-			ret = true;
-		} while (0);
+		std::string u8name;
+		if (Utf16ToUtf8(name, u8name))
+		{
+			FormatToFile(logFile.get(), "[GdipCreateFontFamilyFromName] name = \"{}\", fontCollection = {:x}\n", u8name, reinterpret_cast<size_t>(fontCollection));
+		}
 	}
-	else
+
+	auto it = gdipFontFamiliesMap.find(name);
+	if (it != gdipFontFamiliesMap.end())
+		name = it->second.c_str();
+
+	return addrGdipCreateFontFamilyFromName(name, fontCollection, fontFamily);
+}
+
+GpStatus WINGDIPAPI MyGdipCreateFont(GDIPCONST GpFontFamily* fontFamily, REAL emSize, INT style, Unit unit, GpFont** font)
+{
+	std::wstring name(LF_FACESIZE, 0);
+	if (addrGdipGetFamilyName(fontFamily, name.data(), LANG_NEUTRAL) == GpStatus::Ok)
 	{
-#pragma warning(push)
-#pragma warning(disable: 4996) // 'strerror': This function or variable may be unsafe.
-		swprintf(errMsg, 512, L"Can not open " CONFIG_FILE ".\n%hs", strerror(errno));
-#pragma warning(pop)
+		name.resize(wcslen(name.c_str()));
+
+		if (logFile)
+		{
+			std::string u8name;
+			if (Utf16ToUtf8(name, u8name))
+			{
+				FormatToFile(logFile.get(), "[GdipCreateFont] name = \"{}\", emSize = {}, style = {}, unit = {}\n", u8name, emSize, style, static_cast<uint32_t>(unit));
+			}
+		}
+
+		auto it = gdipFontsMap.find(name);
+		if (it != gdipFontsMap.end())
+		{
+			using OF = GPFontInfo::OverrideFlags;
+			if ((it->second.overrideFlags & OF::Size) == OF::Size)
+				emSize = it->second.size;
+			if ((it->second.overrideFlags & OF::Style) == OF::Style)
+				style = static_cast<INT>(it->second.style);
+			if ((it->second.overrideFlags & OF::Unit) == OF::Unit)
+				unit = static_cast<Unit>(it->second.unit);
+		}
 	}
-	return ret;
+
+	return addrGdipCreateFont(fontFamily, emSize, style, unit, font);
+}
+
+GpStatus WINGDIPAPI MyGdipGetGenericFontFamilySansSerif(GpFontFamily** nativeFamily)
+{
+	return addrGdipCreateFontFamilyFromName(gdipGFFSansSerif.c_str(), nullptr, nativeFamily);
+}
+
+GpStatus WINGDIPAPI MyGdipGetGenericFontFamilySerif(GpFontFamily** nativeFamily)
+{
+	return addrGdipCreateFontFamilyFromName(gdipGFFSerif.c_str(), nullptr, nativeFamily);
+}
+
+GpStatus WINGDIPAPI MyGdipGetGenericFontFamilyMonospace(GpFontFamily** nativeFamily)
+{
+	return addrGdipCreateFontFamilyFromName(gdipGFFMonospace.c_str(), nullptr, nativeFamily);
+}
+
+FontInfo GetFontInfo(const ryml::NodeRef& map)
+{
+	FontInfo info;
+	for (const auto& i : map)
+	{
+		using OF = FontInfo::OverrideFlags;
+
+		if (!i.has_val())
+			continue;
+
+		if (i.key() == "replace" || i.key() == "name")
+		{
+			if (!Utf8ToUtf16(i.val(), info.name))
+				info.name.clear();
+		}
+		else if (i.key() == "size")
+		{
+			i >> info.height;
+			info.overrideFlags |= OF::Height;
+		}
+		else if (i.key() == "width")
+		{
+			i >> info.width;
+			info.overrideFlags |= OF::Width;
+		}
+		else if (i.key() == "weight")
+		{
+			i >> info.weight;
+			info.overrideFlags |= OF::Weight;
+		}
+		else if (i.key() == "italic")
+		{
+			i >> info.italic;
+			info.overrideFlags |= OF::Italic;
+		}
+		else if (i.key() == "underLine")
+		{
+			i >> info.underLine;
+			info.overrideFlags |= OF::Underline;
+		}
+		else if (i.key() == "strikeOut")
+		{
+			i >> info.strikeOut;
+			info.overrideFlags |= OF::StrikeOut;
+		}
+		else if (i.key() == "charSet")
+		{
+			i >> info.charSet;
+			info.overrideFlags |= OF::Charset;
+		}
+		else if (i.key() == "outPrecision")
+		{
+			i >> info.outPrecision;
+			info.overrideFlags |= OF::OutPrecision;
+		}
+		else if (i.key() == "clipPrecision")
+		{
+			i >> info.clipPrecision;
+			info.overrideFlags |= OF::ClipPrecision;
+		}
+		else if (i.key() == "quality")
+		{
+			i >> info.quality;
+			info.overrideFlags |= OF::Quality;
+		}
+		else if (i.key() == "pitchAndFamily")
+		{
+			i >> info.pitchAndFamily;
+			info.overrideFlags |= OF::PitchAndFamily;
+		}
+	}
+	return info;
+}
+
+void AddGdiplusFontInfo(const ryml::NodeRef& map)
+{
+	for (const auto& i : map)
+	{
+		if (!i.has_val())
+			continue;
+
+		if (i.key() == "replace" || i.key() == "name")
+		{
+			std::wstring find, name;
+			if (Utf8ToUtf16(map.key(), find) && Utf8ToUtf16(i.val(), name))
+				gdipFontFamiliesMap.emplace(std::move(find), std::move(name));
+			return;
+		}
+
+		GPFontInfo info;
+		if (i.key() == "size")
+		{
+			i >> info.size;
+			info.overrideFlags |= GPFontInfo::OverrideFlags::Size;
+		}
+		else if (i.key() == "style")
+		{
+			using Style = GPFontInfo::Style;
+
+			bool ok = true;
+			if (i.val() == "regular")
+			{
+				info.style = Style::Regular;
+			}
+			else if (i.val() == "bold")
+			{
+				info.style = Style::Regular;
+			}
+			else if (i.val() == "italic")
+			{
+				info.style = Style::Italic;
+			}
+			else if (i.val() == "boldItalic")
+			{
+				info.style = Style::BoldItalic;
+			}
+			else if (i.val() == "underline")
+			{
+				info.style = Style::Underline;
+			}
+			else if (i.val() == "strikeout")
+			{
+				info.style = Style::Strikeout;
+			}
+			else
+			{
+				uint32_t style;
+				if (read(i, &style))
+					info.style = static_cast<Style>(style);
+				else
+					ok = false;
+			}
+
+			if (ok)
+				info.overrideFlags |= GPFontInfo::OverrideFlags::Style;
+		}
+		else if (i.key() == "unit")
+		{
+			using Unit = GPFontInfo::Unit;
+
+			bool ok = true;
+			if (i.val() == "world")
+			{
+				info.unit = Unit::World;
+			}
+			else if (i.val() == "display")
+			{
+				info.unit = Unit::Display;
+			}
+			else if (i.val() == "pixel")
+			{
+				info.unit = Unit::Pixel;
+			}
+			else if (i.val() == "point")
+			{
+				info.unit = Unit::Point;
+			}
+			else if (i.val() == "inch")
+			{
+				info.unit = Unit::Inch;
+			}
+			else if (i.val() == "document")
+			{
+				info.unit = Unit::Document;
+			}
+			else if (i.val() == "millimeter")
+			{
+				info.unit = Unit::Millimeter;
+			}
+			else
+			{
+				uint32_t unit;
+				if (read(i, &unit))
+					info.unit = static_cast<Unit>(unit);
+				else
+					ok = false;
+			}
+
+			if (ok)
+				info.overrideFlags |= GPFontInfo::OverrideFlags::Unit;
+		}
+
+		if (info.overrideFlags != GPFontInfo::OverrideFlags::None)
+		{
+			std::wstring find;
+			if (Utf8ToUtf16(map.key(), find))
+				gdipFontsMap.emplace(std::move(find), std::move(info));
+		}
+	}
+}
+
+bool LoadSettings(const fs::path& fileName, GSOFontMode& fixGSOFont, LOGFONT& userGSOFont, bool& debug, std::wstring& errMsg)
+{
+	auto config = LoadUtf8FileWithoutBOM(fileName.c_str());
+	const auto tree = [&] {
+		auto tree = ryml::parse(c4::substr(config.data(), config.size()));
+		tree.resolve();
+		return tree;
+	}();
+
+	if (!tree.is_map(tree.root_id()))
+	{
+		errMsg.append(L"Root node is not a map.");
+		return false;
+	}
+
+	for (const auto& i : tree.rootref())
+	{
+		if (i.is_map() && i.key() == "fonts")
+		{
+			for (const auto& j : i)
+			{
+				if (j.is_map())
+				{
+					auto info = GetFontInfo(j);
+					std::wstring find;
+					if (Utf8ToUtf16(j.key(), find))
+						fontsMap.emplace(std::move(find), std::move(info));
+				}
+			}
+		}
+		else if (i.key() == "fixGSOFont")
+		{
+			if (i.has_val())
+			{
+				bool b;
+				i >> b;
+				if (b)
+					fixGSOFont = GSOFontMode::UseNCMFont;
+			}
+			else if (i.is_map())
+			{
+				auto info = GetFontInfo(i);
+				OverrideLogFont(info, userGSOFont);
+			}
+		}
+		else if (i.is_map() && i.key() == "gdiplus")
+		{
+			for (const auto& j : i)
+			{
+				if (j.is_map())
+					AddGdiplusFontInfo(j);
+			}
+		}
+		else if (i.has_val() && i.key() == "gdipGFFSansSerif")
+		{
+			if (!Utf8ToUtf16(i.val(), gdipGFFSansSerif))
+				gdipGFFSansSerif.clear();
+		}
+		else if (i.has_val() && i.key() == "gdipGFFSerif")
+		{
+			if (!Utf8ToUtf16(i.val(), gdipGFFSerif))
+				gdipGFFSerif.clear();
+		}
+		else if (i.has_val() && i.key() == "gdipGFFMonospace")
+		{
+			if (!Utf8ToUtf16(i.val(), gdipGFFMonospace))
+				gdipGFFMonospace.clear();
+		}
+		else if (i.has_val() && i.key() == "debug")
+		{
+			i >> debug;
+		}
+	}
+
+	return true;
 }
 
 void LoadUserFonts(const fs::path& path)
@@ -407,7 +558,9 @@ void LoadUserFonts(const fs::path& path)
 				int ret = AddFontResourceExW(f.path().c_str(), FR_PRIVATE, 0);
 				if (logFile)
 				{
-					fprintf_s(logFile, "[LoadUserFonts] filename = \"%s\", ret = %d, lasterror = %d\n", f.path().filename().u8string().c_str(), ret, GetLastError());
+					std::u8string u8str = f.path().filename().u8string();
+					std::string_view sv(reinterpret_cast<const char*>(u8str.data()), u8str.size());
+					FormatToFile(logFile.get(), "[LoadUserFonts] filename = \"{}\", ret = {}, lasterror = {}\n", sv, ret, GetLastError());
 				}
 			}
 		}
@@ -416,12 +569,12 @@ void LoadUserFonts(const fs::path& path)
 	{
 		if (logFile)
 		{
-			fprintf_s(logFile, "[LoadUserFonts] exception: \"%s\"\n", e.what());
+			FormatToFile(logFile.get(), "[LoadUserFonts] exception: \"{}\"\n", e.what());
 		}
 	}
 }
 
-BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved)
+BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, [[maybe_unused]] LPVOID lpReserved)
 {
 	if (ul_reason_for_call == DLL_PROCESS_ATTACH)
 	{
@@ -431,48 +584,45 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 		MessageBoxW(0, L"DLL_PROCESS_ATTACH", L"", 0);
 #endif
 
+		SetRymlCallbacks();
+
 		auto path = GetModuleFsPath(hModule);
 		LoadDLL(path.filename());
 
 		path = path.remove_filename();
 		auto configPath = path / CONFIG_FILE;
-		if (!fs::exists(configPath))
 		{
-			FILE* f;
-			if (_wfopen_s(&f, configPath.c_str(), L"wb") == 0)
+			wil::unique_hfile hFile(CreateFileW(configPath.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr));
+			if (hFile)
 			{
-				fputs(defConfigFile, f);
-				fclose(f);
+				DWORD written;
+				WriteFile(hFile.get(), defConfigFile.data(), static_cast<DWORD>(defConfigFile.size()), &written, nullptr);
 			}
 		}
 
-		GSOFontMode fixGSOFont = DISABLED;
+		GSOFontMode fixGSOFont = GSOFontMode::Disabled;
 		LOGFONT userGSOFont = {};
 
-		wchar_t errMsg[512];
-		bool debug;
-		if (!LoadSettings(hModule, configPath, errMsg, fixGSOFont, userGSOFont, debug))
+		bool debug = false;
+		std::wstring errMsg(L"LoadSettings error.\n");
+		if (!LoadSettings(configPath, fixGSOFont, userGSOFont, debug, errMsg))
 		{
-			wchar_t msg[512];
-			swprintf_s(msg, L"LoadSettings error.\n%s", errMsg);
-
-			SetThreadDpiAware();
-			MessageBoxW(0, msg, L"Error", MB_ICONERROR);
+			auto restore = SetThreadDpiAwareAutoRestore();
+			MessageBoxW(0, errMsg.c_str(), L"Error", MB_ICONERROR);
 			return TRUE;
 		}
 
 		if (debug)
 		{
 			auto logPath = path / LOG_FILE;
-			logFile = _wfsopen(logPath.c_str(), L"a+", _SH_DENYWR);
-			setvbuf(logFile, nullptr, _IOLBF, BUFSIZ);
+			logFile.reset(CreateFileW(logPath.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_TEMPORARY, nullptr));
 		}
 
 		LoadUserFonts(path);
 
 		switch (fixGSOFont)
 		{
-		case USE_NCM_FONT:
+		case GSOFontMode::UseNCMFont:
 		{
 			NONCLIENTMETRICSW ncm = { sizeof(ncm) };
 			if (SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, 0))
@@ -483,17 +633,17 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 					std::string name;
 					if (Utf16ToUtf8(ncm.lfMessageFont.lfFaceName, name))
 					{
-						fprintf_s(logFile, "[DllMain] SystemParametersInfo NONCLIENTMETRICS.lfMessageFont.lfFaceName=\"%s\"\n", name.c_str());
+						FormatToFile(logFile.get(), "[DllMain] SystemParametersInfo NONCLIENTMETRICS.lfMessageFont.lfFaceName=\"{}\"\n", name);
 					}
 				}
 			}
 			else if (logFile)
 			{
-				fprintf_s(logFile, "[DllMain] SystemParametersInfo failed. (%d)\n", GetLastError());
+				FormatToFile(logFile.get(), "[DllMain] SystemParametersInfo failed. ({})\n", GetLastError());
 			}
 		}
 		break;
-		case USE_USER_FONT:
+		case GSOFontMode::UseUserFont:
 		{
 			newGSOFont = CreateFontIndirectW(&userGSOFont);
 		}
@@ -503,11 +653,11 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 		auto hGdiFull = GetModuleHandleW(L"gdi32full.dll");
 		if (hGdiFull)
 		{
-			auto addrGetStockObjectFull = reinterpret_cast<decltype(GetStockObject)*>(GetProcAddress(hGdiFull, "GetStockObject"));
+			auto addrGetStockObjectFull = GetProcAddressByFunctionDeclaration(hGdiFull, GetStockObject);
 			if (addrGetStockObjectFull)
 				addrGetStockObject = addrGetStockObjectFull;
 
-			auto addrCreateFontIndirectExWFull = reinterpret_cast<decltype(CreateFontIndirectExW)*>(GetProcAddress(hGdiFull, "CreateFontIndirectExW"));
+			auto addrCreateFontIndirectExWFull = GetProcAddressByFunctionDeclaration(hGdiFull, CreateFontIndirectExW);
 			if (addrCreateFontIndirectExWFull)
 				addrCreateFontIndirectExW = addrCreateFontIndirectExWFull;
 		}
@@ -515,27 +665,71 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 		DetourTransactionBegin();
 		DetourUpdateThread(GetCurrentThread());
 
-		if (fixGSOFont != DISABLED)
+		if (fixGSOFont != GSOFontMode::Disabled)
 		{
 			DetourAttach(&(PVOID&)addrGetStockObject, MyGetStockObject);
 		}
 		DetourAttach(&(PVOID&)addrCreateFontIndirectExW, MyCreateFontIndirectExW);
 
+		if (!gdipFontFamiliesMap.empty() || !gdipFontsMap.empty() || !gdipGFFSansSerif.empty() || !gdipGFFSerif.empty() || !gdipGFFMonospace.empty())
+		{
+			HMODULE hGdiplus = LoadLibraryW((GetSysDirFsPath() / L"gdiplus.dll").c_str());
+			auto err = GetLastError();
+			FormatToFile(logFile.get(), "[DllMain] Load GDI+ address = {:x}, lasterror = {}\n", reinterpret_cast<size_t>(hGdiplus), err);
+
+			if (hGdiplus)
+			{
+				if (!gdipFontFamiliesMap.empty())
+				{
+					addrGdipCreateFontFamilyFromName = GetProcAddressByFunctionDeclaration(hGdiplus, GdipCreateFontFamilyFromName);
+					if (addrGdipCreateFontFamilyFromName)
+						DetourAttach(&(PVOID&)addrGdipCreateFontFamilyFromName, MyGdipCreateFontFamilyFromName);
+				}
+
+				if (!gdipFontsMap.empty())
+				{
+					addrGdipCreateFont = GetProcAddressByFunctionDeclaration(hGdiplus, GdipCreateFont);
+					if (addrGdipCreateFont)
+					{
+						addrGdipGetFamilyName = GetProcAddressByFunctionDeclaration(hGdiplus, GdipGetFamilyName);
+						if (addrGdipGetFamilyName)
+							DetourAttach(&(PVOID&)addrGdipCreateFont, MyGdipCreateFont);
+					}
+				}
+
+				if (!gdipGFFSansSerif.empty())
+				{
+					addrGdipGetGenericFontFamilySansSerif = GetProcAddressByFunctionDeclaration(hGdiplus, GdipGetGenericFontFamilySansSerif);
+					if (addrGdipGetGenericFontFamilySansSerif)
+						DetourAttach(&(PVOID&)addrGdipGetGenericFontFamilySansSerif, MyGdipGetGenericFontFamilySansSerif);
+				}
+
+				if (!gdipGFFSerif.empty())
+				{
+					addrGdipGetGenericFontFamilySerif = GetProcAddressByFunctionDeclaration(hGdiplus, GdipGetGenericFontFamilySerif);
+					if (addrGdipGetGenericFontFamilySerif)
+						DetourAttach(&(PVOID&)addrGdipGetGenericFontFamilySerif, MyGdipGetGenericFontFamilySerif);
+				}
+
+				if (!gdipGFFMonospace.empty())
+				{
+					addrGdipGetGenericFontFamilyMonospace = GetProcAddressByFunctionDeclaration(hGdiplus, GdipGetGenericFontFamilyMonospace);
+					if (addrGdipGetGenericFontFamilyMonospace)
+						DetourAttach(&(PVOID&)addrGdipGetGenericFontFamilyMonospace, MyGdipGetGenericFontFamilyMonospace);
+				}
+			}
+		}
+
 		auto error = DetourTransactionCommit();
 		if (error != ERROR_SUCCESS)
 		{
-			wchar_t msg[512];
-			swprintf_s(msg, L"DetourTransactionCommit error: %d", error);
-
-			SetThreadDpiAware();
-			MessageBoxW(0, msg, L"Error", MB_ICONERROR);
+			auto msg = std::format(L"DetourTransactionCommit error: {}", error);
+			{
+				auto restore = SetThreadDpiAwareAutoRestore();
+				MessageBoxW(0, msg.c_str(), L"Error", MB_ICONERROR);
+			}
 			return TRUE;
 		}
-	}
-	else if (ul_reason_for_call == DLL_PROCESS_DETACH)
-	{
-		if (logFile)
-			fclose(logFile);
 	}
 	return TRUE;
 }
